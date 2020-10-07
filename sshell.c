@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #define CMDLINE_MAX 512
+#define MAX_ARGS 16
 
 int main(void)
 {
