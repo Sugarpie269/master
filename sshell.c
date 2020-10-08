@@ -9,27 +9,13 @@
 #define MAX_ARGS 16
 
 void ConvertToWords(char cmd[], char *argv[]){
-       /* int i=0, k=0;
-        char *ch;
-        while(cmd[i] != "\n"){
-               if(cmd[i] != " " | cmd[i] != "   "){
-                        strncat(ch, &cmd[i], 1);        
-               } else{
-                      argv[k] = ch; 
-                      k++;
-                      ch = NULL;
-               }
-               i++;
-        }*/
         int i=0;
         const char delim[2] = " ";
         char *token;
         token = strtok(cmd, delim);
-        while(token != NULL){
-                if(strcmp(token,"\n") != 0){
-                        argv[i] = token;
-                        printf("%d\n", i);
-                }
+        while(token!=NULL && strcmp(token,"\n") != 0){
+                argv[i] = token;
+                printf("%d = ", i);
                 printf("%s\n", token);
                 token = strtok(NULL, delim);
                 i++;
@@ -76,6 +62,7 @@ int main(void)
 
                 /* Regular command */
                 if(!fork()){
+                        //printf("argv[0] = %s\n, argv[1] = %s\n, argv[2] = %s\n", argv[0], argv[1], argv[2]);
                         retval = execvp(argv[0], argv);
                         fprintf(stdout, "Return status value for '%s': %d\n",
                         cmd, retval);
