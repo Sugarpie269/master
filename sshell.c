@@ -12,6 +12,7 @@ void ConvertToWords(char cmd[], char *argv[]){
         int i=0;
         const char delim[2] = " ";
         char *token;
+        printf("cmd = %s\n", cmd);
         token = strtok(cmd, delim);
         while(token!=NULL && strcmp(token,"\n") != 0){
                 argv[i] = token;
@@ -46,6 +47,7 @@ int main(void)
                 }
 
                 /*Get the characters into an array words*/
+                memset(argv, '\0', sizeof(argv));
                 ConvertToWords(cmd, argv);
 
                 /* Remove trailing newline from command line */
@@ -62,10 +64,11 @@ int main(void)
 
                 /* Regular command */
                 if(!fork()){
-                        //printf("argv[0] = %s\n, argv[1] = %s\n, argv[2] = %s\n", argv[0], argv[1], argv[2]);
+                        printf("argv[0] = %s\nargv[1] = %s\nargv[2] = %s\n", argv[0], argv[1], argv[2]);
                         retval = execvp(argv[0], argv);
                         fprintf(stdout, "Return status value for '%s': %d\n",
                         cmd, retval);
+                        memset(argv, '\0', sizeof(argv));
                 } else{
                         waitpid(-1, &status, 0);
                 }
