@@ -12,12 +12,9 @@ void ConvertToWords(char cmd[], char *argv[]){
         int i=0;
         const char delim[2] = " ";
         char *token;
-        printf("cmd = %s\n", cmd);
         token = strtok(cmd, delim);
         while(token!=NULL && strcmp(token,"\n") != 0){
                 argv[i] = token;
-                printf("%d = ", i);
-                printf("%s\n", token);
                 token = strtok(NULL, delim);
                 i++;
         }
@@ -26,11 +23,12 @@ void ConvertToWords(char cmd[], char *argv[]){
 int main(void)
 {
         char cmd[CMDLINE_MAX];
+        char cmd_original[CMDLINE_MAX];
         char *argv[MAX_ARGS];
 
         while (1) {
                 char *nl;
-                int retval;
+                int retval = 0;
                 int status;
 
                 /* Print prompt */
@@ -48,15 +46,16 @@ int main(void)
 
                 /*Get the characters into an array words*/
                 memset(argv, '\0', sizeof(argv));
+                memcpy(cmd_original, cmd, sizeof(cmd));
                 ConvertToWords(cmd, argv);
 
-                /* Remove trailing newline from command line */
+                //Remove trailing newline from command line
                 nl = strchr(cmd, '\n');
                 if (nl)
                         *nl = '\0';
 
                 /* Builtin command */
-                if (!strcmp(cmd, "exit")) {
+                if (!strcmp(argv[0], "exit")) {
                         fprintf(stderr, "Bye...\n");
                         //Execute a command which implements the exit command 
                         break;
@@ -64,13 +63,12 @@ int main(void)
 
                 /* Regular command */
                 if(!fork()){
-                        printf("argv[0] = %s\nargv[1] = %s\nargv[2] = %s\n", argv[0], argv[1], argv[2]);
                         retval = execvp(argv[0], argv);
-                        fprintf(stdout, "Return status value for '%s': %d\n",
-                        cmd, retval);
-                        memset(argv, '\0', sizeof(argv));
                 } else{
                         waitpid(-1, &status, 0);
+                        cmd_original[strlen(cmd_original)-1]='\0';
+                        printf("+ completed '%s' [%d]\n", cmd_original, retval);
+                        retval = 0;
                 }
                 
         }
