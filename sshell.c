@@ -40,6 +40,10 @@ int main(void)
                 int retval = 0;
                 int status;
                 pid_t pid;
+                //char *val[1];
+                //val[0] = "cat";
+                //char *valTest[1];
+                //valTest[0] = "test.txt";
 
                 /* Print prompt */
                 printf("sshell$ ");
@@ -54,20 +58,21 @@ int main(void)
                         fflush(stdout);
                 }
 
-                /*Get the characters into an array words*/
-                memset(argv, '\0', sizeof(argv));
+                /*Copy cmd to a new cmd*/
                 memcpy(cmd_original, cmd, sizeof(cmd));
-                int sizeOfArgv = ConvertToWords(cmd, argv) + 1;
 
-
-                char *argsWithoutNull[sizeOfArgv];
-                CopyCharArray(argsWithoutNull, argv, sizeOfArgv);
-                
-                // ask in the discussion printf("blah %s dsfs", cmd);
-                //Remove trailing newline from command line
+                /*Remove trailing newline from command line*/
                 nl = strchr(cmd, '\n');
                 if (nl)
                         *nl = '\0';
+                
+                /*Get the characters into an array words*/        
+                memset(argv, '\0', sizeof(argv));
+                
+                int sizeOfArgv = ConvertToWords(cmd, argv) + 1;
+                char *argsWithoutNull[sizeOfArgv];
+                CopyCharArray(argsWithoutNull, argv, sizeOfArgv);
+
 
                 /* Builtin command */
                 if (!strcmp(argsWithoutNull[0], "exit")) {
@@ -80,13 +85,17 @@ int main(void)
                 pid = fork();
                 if(pid == 0){
                         /* Child Process*/
-                        retval = execvp(argsWithoutNull[0], argsWithoutNull);
+                        for(int i=0;i<sizeOfArgv;i++){
+                                printf("| %s | ", argsWithoutNull[i]);
+                        }
+                        printf("%ld", sizeof(argsWithoutNull)/sizeof(char));
+                        retval = execvp(argsWithoutNull[0],&argsWithoutNull[0]);
                         perror("evecvp error in child");
                 } else if(pid > 0){
                         /* Parent Process*/
                         waitpid(-1, &status, 0);
                         cmd_original[strlen(cmd_original)-1]='\0';
-                        printf("+ completed '%s' [%d]\n", cmd_original, retval);
+                        printf("\n+ completed '%s' [%d]\n", cmd_original, retval);
                         retval = 0;
                 } else {
                         perror("fork");
