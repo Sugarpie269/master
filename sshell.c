@@ -30,6 +30,7 @@ int main(void)
                 char *nl;
                 int retval = 0;
                 int status;
+                pid_t pid;
 
                 /* Print prompt */
                 printf("sshell$ ");
@@ -63,13 +64,20 @@ int main(void)
                 }
 
                 /* Regular command */
-                if(!fork()){
+                pid = fork();
+                if(pid == 0){
+                        /* Child Process*/
                         retval = execvp(argv[0], argv);
-                } else{
+                        perror("evecvp error in child");
+                } else if(pid > 0){
+                        /* Parent Process*/
                         waitpid(-1, &status, 0);
                         cmd_original[strlen(cmd_original)-1]='\0';
                         printf("+ completed '%s' [%d]\n", cmd_original, retval);
                         retval = 0;
+                } else {
+                        perror("fork");
+                        exit(1);
                 }
                 
         }
