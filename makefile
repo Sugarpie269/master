@@ -1,3 +1,6 @@
 sshell_exec:	sshell.c
-	gcc -g -Wall -o sshell_exec sshell.c
-clean:	$(RM) sshell 
+	gcc -g -Wall -Wextra -Werror -o sshell_exec sshell.c
+
+.PHONY : clean
+clean :
+	-rm sshell_exec 
