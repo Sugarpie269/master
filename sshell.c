@@ -8,7 +8,7 @@
 #define CMDLINE_MAX 512
 #define MAX_ARGS 16
 
-void ConvertToWords(char cmd[], char *argv[]){
+int ConvertToWords(char cmd[], char *argv[]){
         int i=0;
         const char delim[2] = " ";
         char *token;
@@ -18,6 +18,15 @@ void ConvertToWords(char cmd[], char *argv[]){
                 token = strtok(NULL, delim);
                 i++;
         }
+        return i;
+}
+
+void CopyCharArray(char *argsWithoutNull[], char *argv[], int sizeOfArgv){
+        for(int i=0;i<sizeOfArgv;i++){
+                argsWithoutNull[i] = argv[i];
+                //printf("%s", argsWithoutNull[i]);
+        }
+        argsWithoutNull[sizeOfArgv] = NULL;
 }
 
 int main(void)
@@ -48,7 +57,11 @@ int main(void)
                 /*Get the characters into an array words*/
                 memset(argv, '\0', sizeof(argv));
                 memcpy(cmd_original, cmd, sizeof(cmd));
-                ConvertToWords(cmd, argv);
+                int sizeOfArgv = ConvertToWords(cmd, argv) + 1;
+
+
+                char *argsWithoutNull[sizeOfArgv];
+                CopyCharArray(argsWithoutNull, argv, sizeOfArgv);
                 
                 // ask in the discussion printf("blah %s dsfs", cmd);
                 //Remove trailing newline from command line
@@ -57,7 +70,7 @@ int main(void)
                         *nl = '\0';
 
                 /* Builtin command */
-                if (!strcmp(argv[0], "exit")) {
+                if (!strcmp(argsWithoutNull[0], "exit")) {
                         fprintf(stderr, "Bye...\n");
                         //Execute a command which implements the exit command 
                         break;
@@ -67,7 +80,7 @@ int main(void)
                 pid = fork();
                 if(pid == 0){
                         /* Child Process*/
-                        retval = execvp(argv[0], argv);
+                        retval = execvp(argsWithoutNull[0], argsWithoutNull);
                         perror("evecvp error in child");
                 } else if(pid > 0){
                         /* Parent Process*/
