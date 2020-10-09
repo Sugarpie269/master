@@ -48,7 +48,8 @@ int main(void)
                 memset(argv, '\0', sizeof(argv));
                 memcpy(cmd_original, cmd, sizeof(cmd));
                 ConvertToWords(cmd, argv);
-
+                
+                // ask in the discussion printf("blah %s dsfs", cmd);
                 //Remove trailing newline from command line
                 nl = strchr(cmd, '\n');
                 if (nl)
