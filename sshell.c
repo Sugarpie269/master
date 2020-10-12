@@ -44,42 +44,48 @@ int ConvertToWords(char cmd[], char *argv[]){
         return i;
 }
 
-int ConvertToWords_2(char cmd[], char *argv[]){
-        struct CommandLine structCmd;
-        int j=0;
-        const char delim[] = " >|";
-        char *token;
-        structCmd.numPipeLine = 0;
-        int numberOfArgs = 0;
-        for(int i=0;i<=(int)strlen(cmd); i++){
-                if(numberOfArgs <= 16){
-                        if(cmd[i] != " "){
-                                if(cmd[i] == ">"){
-                                        argv[j] = ">";
-                                        structCmd.args[j] = ">";
-                                        structCmd.isRedirect = true;
-                                        j++;
-                                }else if(cmd[i] == "|"){
-                                        argv[j] = "|";
-                                        structCmd.args[j] = "|";
-                                        structCmd.isPipe = true;
-                                        structCmd.numPipeLine++;
-                                        j++;
-                                }else{
-                                        strncat(token, &cmd[i], sizeof(token) + sizeof(cmd[i]));
-                                }
-                        }
-                        argv[j] = token;
-                        structCmd.args[j] = token;
-                        token = NULL;
-                        numberOfArgs++;
-                        j++;
-                }else{
+int ParseRD(char cmd[], char* argv[]) {
+        int i = 0;
+        const char delim[] = ">";
+        char* token;
+        token = strtok(cmd, delim);
+        while (token != NULL && strcmp(token, "\n") != 0) {
+                if (i > 16) {
                         return TOO_MANY_ARGS;
                 }
-                printf("%s , ", structCmd.args[j]);
+                argv[i] = token;
+                printf("RD_argv[%d] = %s , ", i, argv[i]);
+                token = strtok(NULL, delim);
+                i++;
         }
-        return j;
+        if (i == 1) {
+                printf("\n No Redirect.\n");
+                return -1;
+        }
+        printf("\n");
+        return i;
+}
+
+int ParsePL(char cmd[], char* argv[]) {
+        int i = 0;
+        const char delim[] = "|";
+        char* token;
+        token = strtok(cmd, delim);
+        while (token != NULL && strcmp(token, "\n") != 0) {
+                if (i > 16) {
+                        return TOO_MANY_ARGS;
+                }
+                argv[i] = token;
+                printf("PL_argv[%d] = %s , ", i, argv[i]);
+                token = strtok(NULL, delim);
+                i++;
+        }
+        if (i == 1) {
+                printf("\n No Pipe.\n");
+                return -1;
+        }
+        printf("\n");
+        return i;
 }
 
 void CopyCharArray(char *argsWithoutNull[], char *argv[], int sizeOfArgv){
@@ -94,11 +100,18 @@ int main(void)
 {
         char cmd[CMDLINE_MAX];
         char cmd_original[CMDLINE_MAX];
+        char cmd_pl_Copy[CMDLINE_MAX];
+        char cmd_rd_Copy[CMDLINE_MAX];
         char *argv[MAX_ARGS];
+        char *argPL[MAX_ARGS];
+        char *argRD[MAX_ARGS];
+        
+
 
         while (1) {
                 char *nl;
                 int status, sizeOfArgv;
+                int sizeOfRedir, sizeOfPipe;
                 pid_t pid;
 
                 /* Print prompt */
@@ -117,50 +130,124 @@ int main(void)
                 /*Copy cmd to a new cmd*/
                 memcpy(cmd_original, cmd, sizeof(cmd));
 
+
                 /*Remove trailing newline from command line*/
                 nl = strchr(cmd, '\n');
                 if (nl)
                         *nl = '\0';
-                
+
+                /*Make 3 versions of cmd for parsing*/
+                memcpy(cmd_pl_Copy, cmd, sizeof(cmd));
+                memcpy(cmd_rd_Copy, cmd, sizeof(cmd));
+
                 /*Get the characters into an array words*/        
                 memset(argv, '\0', sizeof(argv));
+                memset(argPL, '\0', sizeof(argPL));
+                memset(argRD, '\0', sizeof(argRD));
                 
                 int value = ConvertToWords(cmd, argv) + 1;
-                if(value == TOO_MANY_ARGS){
-                        fprintf(stderr, "Error: too many process arguments");
-                }else{
-                        sizeOfArgv = value;
-                }
-                char *argsWithoutNull[sizeOfArgv];
-                CopyCharArray(argsWithoutNull, argv, sizeOfArgv);
+                int hasPipe = ParsePL(cmd_pl_Copy, argPL) + 1;
+                int hasRedir = ParseRD(cmd_rd_Copy, argRD) + 1;
 
+                printf("value = %d, PL = %d, RD = %d \n", value, hasPipe, hasRedir);
 
-                /* Builtin command */
-                if (!strcmp(argsWithoutNull[0], "exit")) {
-                        fprintf(stderr, "Bye...\n");
-                        //Execute a command which implements the exit command 
-                        break;
-                }
+                if (hasPipe == 0 && hasRedir == 0) {
+                        
+                        if (value == TOO_MANY_ARGS + 1) {
+                                fprintf(stderr, "Error: too many process arguments");
+                        }
+                        else {
+                                sizeOfArgv = value;
+                        }
+                        char* argsWithoutNull[sizeOfArgv];
+                        CopyCharArray(argsWithoutNull, argv, sizeOfArgv);
 
-                /* Regular command */
-                pid = fork();
-                if(pid == 0){
-                        /* Child Process*/
-                        for(int i=0;i<sizeOfArgv;i++){
+                        /* Builtin command */
+                        if (!strcmp(argsWithoutNull[0], "exit")) {
+                                fprintf(stderr, "Bye...\n");
+                                //Execute a command which implements the exit command 
+                                break;
+                        }
+                        /* Regular command */
+                        for (int i = 0; i < sizeOfArgv; i++) {
                                 printf("| %s | ", argsWithoutNull[i]);
                         }
-                        printf("%ld", sizeof(argsWithoutNull)/sizeof(char));
-                        execvp(argsWithoutNull[0],&argsWithoutNull[0]);
-                        perror("evecvp error in child");
-                } else if(pid > 0){
-                        /* Parent Process*/
-                        waitpid(pid == P_PID, &status, 0);
-                        cmd_original[strlen(cmd_original)-1]='\0';
-                        fprintf(stderr, "+ completed '%s' [%d]\n", cmd_original, status);
-                } else {
-                        perror("fork");
-                        exit(1);
+                        printf("%ld", sizeof(argsWithoutNull) / sizeof(char));
+                        printf("\n");
+
+                        pid = fork();
+                        if (pid == 0) {
+                                /* Child Process*/
+                                execvp(argsWithoutNull[0], &argsWithoutNull[0]);
+                                perror("evecvp error in child");
+                        }
+                        else if (pid > 0) {
+                                /* Parent Process*/
+                                waitpid(pid == P_PID, &status, 0);
+                                cmd_original[strlen(cmd_original) - 1] = '\0';
+                                fprintf(stderr, "+ completed '%s' [%d]\n", cmd_original, status);
+                        }
+                        else {
+                                perror("fork");
+                                exit(1);
+                        }
                 }
+                else if (hasPipe == 0 && hasRedir > 0) {
+                        //If redir:
+                        //TODO: Check if its redir appending
+                        //Implementation of redir
+                        sizeOfRedir = hasRedir;
+                        char* redirArgsTrim[sizeOfRedir]; //Should be size = 2
+                        CopyCharArray(redirArgsTrim, argRD, sizeOfRedir);
+                        for (int i = 0; i < sizeOfRedir; i++) {
+                                printf("[ %s ] ", redirArgsTrim[i]);
+                        }
+                        printf("%ld", sizeof(redirArgsTrim) / sizeof(char));
+                        printf("\n");
+                }
+                else if (hasPipe > 0 && hasRedir == 0) {
+                        //If pipe:
+                        //Implementation of piping
+                        sizeOfPipe = hasPipe;
+                        char* pipeArgsTrim[sizeOfPipe];
+                        CopyCharArray(pipeArgsTrim, argPL, sizeOfPipe);
+                        for (int i = 0; i < sizeOfPipe; i++) {
+                                printf("{ %s } ", pipeArgsTrim[i]);
+                        }
+                        printf("%ld", sizeof(pipeArgsTrim) / sizeof(char));
+                        printf("\n");
+                }
+                else {
+                        //If both:
+                        //After checking only 1 redir and less than 3 pipes
+                        sizeOfPipe = hasPipe;
+                        sizeOfRedir = hasRedir;
+                        char* pipeArgsTrim[sizeOfPipe];
+                        char* redirArgsTrim[sizeOfRedir]; //Should be size = 2
+
+                        CopyCharArray(pipeArgsTrim, argPL, sizeOfPipe);
+                        CopyCharArray(redirArgsTrim, argRD, sizeOfRedir);
+
+                        for (int i = 0; i < sizeOfRedir; i++) {
+                                printf("[ %s ] ", redirArgsTrim[i]);
+                        }
+                        printf("%ld", sizeof(redirArgsTrim) / sizeof(char));
+                        printf("\n");
+
+                        for (int i = 0; i < sizeOfPipe; i++) {
+                                printf("{ %s } ", pipeArgsTrim[i]);
+                        }
+                        printf("%ld", sizeof(pipeArgsTrim) / sizeof(char));
+                        printf("\n");
+
+                        //Conduct piping mechanism up until the last argument (asuming each piping action is correct)
+                                //If any piping actions fail, the following will fail in some way...?
+
+                        //Last element should be something like [action > file]
+                        //Thus, parseRedir->last element, pipe into action and write to file
+                                //If Redir fails, use errors that would raise in redir
+                }
+
                 
         }
 
