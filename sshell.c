@@ -50,9 +50,10 @@ int ConvertToWords(char cmd[], char *argv[])
         return i;
 }*/
 
-int GetTokens(char **argv, char cmd[], const char delim[]){
+int GetTokens(char **argv, char cmd[], const char delim[])
+{
         printf("Begin: %s\n", __func__);
-        int i=0;
+        int i = 0;
         char *token;
         token = strtok(cmd, delim);
         printf("Begin: While loop\n");
@@ -62,7 +63,7 @@ int GetTokens(char **argv, char cmd[], const char delim[]){
                 {
                         return TOO_MANY_ARGS;
                 }
-                argv = (char**)realloc(argv, sizeof(argv)+sizeof(token));
+                argv = (char **)realloc(argv, sizeof(argv) + sizeof(token));
                 argv[i] = token;
                 printf("argv[%d] = %s , ", i, argv[i]);
                 token = strtok(NULL, delim);
@@ -77,28 +78,36 @@ int GetTokens(char **argv, char cmd[], const char delim[]){
 int ConvertToWords(char cmd[], __attribute__((unused)) char **argv)
 {
         printf("Begin: %s\n", __func__);
-        const char delim_pipe[] = " |";
-        const char delim_redirect[] = " >";
-        char **argv_pipe = NULL, **argv_redirect = NULL;
-        int get_num_tokens_pipe = 0, get_num_tokens_redirect = 0;
+        const char delim_pipe[] = "|";
+        const char delim_redirect[] = ">";
+        char **argv_pipe = NULL, **argv_redirect = NULL, **argv_normal = NULL;
+        int get_num_tokens_pipe = 0, get_num_tokens_redirect = 0, get_num_tokens_normal = 0;
         argv = NULL;
+        printf("Normal\n");
+        get_num_tokens_normal = GetTokens(argv_normal, cmd, delim_redirect);
         printf("Pipe\n");
         get_num_tokens_pipe = GetTokens(argv_pipe, cmd, delim_pipe);
         printf("Redirect\n");
         get_num_tokens_redirect = GetTokens(argv_redirect, cmd, delim_redirect);
-        if(get_num_tokens_redirect>get_num_tokens_pipe) {
-                argv = (char**)realloc(argv, sizeof(argv_redirect));
+        if (get_num_tokens_redirect > get_num_tokens_pipe)
+        {
+                argv = (char **)realloc(argv, sizeof(argv_redirect));
                 argv = argv_redirect;
                 printf("End: %s\n", __func__);
                 return get_num_tokens_redirect;
-        }else if(get_num_tokens_redirect<get_num_tokens_pipe){
-                argv = (char**)realloc(argv, sizeof(argv_pipe));
+        }
+        else if (get_num_tokens_redirect < get_num_tokens_pipe)
+        {
+                argv = (char **)realloc(argv, sizeof(argv_pipe));
                 argv = argv_pipe;
                 printf("End: %s\n", __func__);
                 return get_num_tokens_pipe;
-        }else{
-                argv = (char**)realloc(argv, sizeof(argv_pipe));
+        }
+        else
+        {
+                argv = (char **)realloc(argv, sizeof(argv_pipe));
                 argv = argv_pipe;
+                printf("argv_pipe[0] = %s", argv_pipe[0]);
                 printf("End: %s\n", __func__);
                 return get_num_tokens_pipe;
         }
@@ -121,8 +130,9 @@ int main(void)
 {
         char cmd[CMDLINE_MAX];
         char cmd_original[CMDLINE_MAX];
+        bool exit_bool = false;
 
-        while (1)
+        while (1 && exit_bool == false)
         {
                 char *nl;
                 int status;
@@ -166,7 +176,7 @@ int main(void)
                 if (!strcmp(argv[0], "exit"))
                 {
                         fprintf(stderr, "Bye...\n");
-                        //Execute a command which implements the exit command
+                        exit_bool = true;//Execute a command which implements the exit command
                         break;
                 }
 
