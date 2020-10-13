@@ -153,6 +153,14 @@ int main(void)
                 if (nl)
                         *nl = '\0';
 
+                nl = strchr(cmd_pl_Copy, '\n');
+                if (nl)
+                        *nl = '\0';
+
+                nl = strchr(cmd_rd_Copy, '\n');
+                if (nl)
+                        *nl = '\0';
+
                 /*Set all the value of arguments to NULL*/        
                 memset(argv, '\0', sizeof(argv));
                 memset(argPL, '\0', sizeof(argPL));
