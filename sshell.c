@@ -19,6 +19,13 @@ enum PARSING_ERRORS{
         MISCLOCATED_OUTPUT_REDIRECTION = -5,
 }; 
 
+enum DELIMS{
+        SPACE = 0,
+        PIPE = 1,
+        REDIRECT = 2,
+        NUMBER_OF_DELIMS = 3,
+};
+
 struct command{
         char *args[MAX_ARGS];
         int numberOfArguments;
@@ -33,9 +40,8 @@ struct CommandLine{
 
 
 
-int ConvertToWords(char cmd[], char *argv[]){
+int ConvertToWords(char cmd[], char *argv[], const char delim[]){
         int i=0;
-        const char delim[] = " >|";
         char *token;
         token = strtok(cmd, delim);
         while(token!=NULL && strcmp(token,"\n") != 0){
@@ -47,48 +53,8 @@ int ConvertToWords(char cmd[], char *argv[]){
                 token = strtok(NULL, delim);
                 i++;
         }
-        printf("\n");
-        return i;
-}
-
-int ParseRD(char cmd[], char* argv[]) {
-        int i = 0;
-        const char delim[] = ">";
-        char* token;
-        token = strtok(cmd, delim);
-        while (token != NULL && strcmp(token, "\n") != 0) {
-                if (i > 16) {
-                        return TOO_MANY_ARGS;
-                }
-                argv[i] = token;
-                printf("RD_argv[%d] = %s , ", i, argv[i]);
-                token = strtok(NULL, delim);
-                i++;
-        }
-        if (i == 1) {
-                printf("\n No Redirect.\n");
-                return -1;
-        }
-        printf("\n");
-        return i;
-}
-
-int ParsePL(char cmd[], char* argv[]) {
-        int i = 0;
-        const char delim[] = "|";
-        char* token;
-        token = strtok(cmd, delim);
-        while (token != NULL && strcmp(token, "\n") != 0) {
-                if (i > 16) {
-                        return TOO_MANY_ARGS;
-                }
-                argv[i] = token;
-                printf("PL_argv[%d] = %s , ", i, argv[i]);
-                token = strtok(NULL, delim);
-                i++;
-        }
-        if (i == 1) {
-                printf("\n No Pipe.\n");
+        if (i == 1 && strcmp(delim," ") != 0) {
+                printf("\n No Redirect. and No Pipe\n");
                 return -1;
         }
         printf("\n");
@@ -122,6 +88,9 @@ int main(void)
         char *argPL[MAX_ARGS];
         char *argRD[MAX_ARGS];
         bool exit_bool = false;
+        const char delim_space[] = " ";
+        const char delim_pipe[] = "|";
+        const char delim_redirect[] = ">";
         
 
 
@@ -169,13 +138,13 @@ int main(void)
                 memset(argRD, '\0', sizeof(argRD));
                 
                 /*Get the characters into an array words*/
-                int value = ConvertToWords(cmd, argv);
-                int hasPipe = ParsePL(cmd_pl_Copy, argPL) + 1;
-                int hasRedir = ParseRD(cmd_rd_Copy, argRD) + 1;
+                int value = ConvertToWords(cmd, argv, delim_space);
+                int hasPipe = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe);
+                int hasRedir = ConvertToWords(cmd_rd_Copy, argRD, delim_redirect);
 
                 printf("value = %d, PL = %d, RD = %d \n", value, hasPipe, hasRedir);
 
-                if (hasPipe == 0 && hasRedir == 0) {
+                if (hasPipe == -1 && hasRedir == -1) {
                         structCmd.isPipe = false;
                         structCmd.isRedirect = false;
                         structCmd.numberOfCommands = 1;
@@ -189,12 +158,16 @@ int main(void)
                         CopyCharArray(structCmd.array_commands[0].args, argv, structCmd.array_commands[0].numberOfArguments);
 
                         /* Builtin command */
+
+                        /*exit*/
                         if (!strcmp(structCmd.array_commands[0].args[0], "exit")) {
                                 fprintf(stderr, "Bye...\n");
                                 exit_bool = true;
                                 //Execute a command which implements the exit command 
                                 break;
                         }
+
+                        /*cd*/
                         if (!strcmp(structCmd.array_commands[0].args[0], "cd")) {
                                 //TODO: Error checking with changing directories
                                 int eNotDir;
@@ -207,10 +180,14 @@ int main(void)
                                 }
                                 continue;
                         }
+
+                        /*pwd*/
                         if (!strcmp(structCmd.array_commands[0].args[0], "pwd")) {
                                 getcwd(cwd, sizeof(cwd));
                                 printf("%s\n", cwd);
                                 continue;
+                        }
+
                         /* Regular command */
                         for (int i = 0; i < structCmd.array_commands[0].numberOfArguments; i++) {
                                 printf("| %s | ", structCmd.array_commands[0].args[i]);
@@ -234,18 +211,18 @@ int main(void)
                                 exit(1);
                         }
                 }
-                else if (hasPipe == 0 && hasRedir > 0) {
+                else if (hasPipe == -1 && hasRedir > -1) {
                         //If redir:
                         //TODO: Check if its redir appending
                         //Implementation of redir
                         structCmd.isRedirect = true;
-                        structCmd.numberOfCommands = hasRedir - 1;
+                        structCmd.numberOfCommands = hasRedir;
                         char* redirArgsTrim[structCmd.numberOfCommands]; //Should be size = 2
                         char* argvCommandsRedirect[MAX_ARGS];
                         CopyCharArray(redirArgsTrim, argRD, structCmd.numberOfCommands);
                         
                         for (int i = 0; i < structCmd.numberOfCommands; i++) {
-                                structCmd.array_commands[i].numberOfArguments = ConvertToWords(redirArgsTrim[i], argvCommandsRedirect) + 1;
+                                structCmd.array_commands[i].numberOfArguments = ConvertToWords(redirArgsTrim[i], argvCommandsRedirect, delim_space) + 1;
                                 CopyCharArray(structCmd.array_commands[i].args, argvCommandsRedirect, structCmd.array_commands[i].numberOfArguments);
                                 for(int j=0;j<structCmd.array_commands[i].numberOfArguments;j++){
                                         printf("{ %s } ", structCmd.array_commands[i].args[j]);
@@ -258,15 +235,15 @@ int main(void)
 
                         printf("\n");
                 }
-                else if (hasPipe > 0 && hasRedir == 0) {
+                else if (hasPipe > -1 && hasRedir == -1) {
                         //If pipe:
                         //Implementation of piping
                         char* argvCommandsPipe[MAX_ARGS];
-                        structCmd.numberOfCommands = hasPipe - 1;
+                        structCmd.numberOfCommands = hasPipe;
                         char* pipeArgsTrim[structCmd.numberOfCommands];
                         CopyCharArray(pipeArgsTrim, argPL, structCmd.numberOfCommands);
                         for (int i = 0; i < structCmd.numberOfCommands; i++) {
-                                structCmd.array_commands[i].numberOfArguments = ConvertToWords(pipeArgsTrim[i], argvCommandsPipe) + 1;
+                                structCmd.array_commands[i].numberOfArguments = ConvertToWords(pipeArgsTrim[i], argvCommandsPipe, delim_space) + 1;
                                 CopyCharArray(structCmd.array_commands[i].args, argvCommandsPipe, structCmd.array_commands[i].numberOfArguments);
                                 for(int j=0;j<structCmd.array_commands[i].numberOfArguments;j++){
                                         printf("{ %s } ", structCmd.array_commands[i].args[j]);
