@@ -18,13 +18,17 @@ enum PARSING_ERRORS{
         MISCLOCATED_OUTPUT_REDIRECTION = -5,
 }; 
 
+struct command{
+        char *args[MAX_ARGS];
+};
+
 struct CommandLine{
-        char **args;
-        char *command;
+        struct command array_commands[MAX_ARGS];
         bool isRedirect;
         bool isPipe;
-        int numPipeLine;
 };
+
+
 
 int ConvertToWords(char cmd[], char *argv[]){
         int i=0;
@@ -105,14 +109,16 @@ int main(void)
         char *argv[MAX_ARGS];
         char *argPL[MAX_ARGS];
         char *argRD[MAX_ARGS];
+        bool exit_bool = false;
         
 
 
-        while (1) {
+        while (1 && exit_bool == false) {
                 char *nl;
                 int status, sizeOfArgv;
                 int sizeOfRedir, sizeOfPipe;
                 pid_t pid;
+                struct CommandLine structCmd;
 
                 /* Print prompt */
                 printf("sshell$ ");
@@ -129,22 +135,21 @@ int main(void)
 
                 /*Copy cmd to a new cmd*/
                 memcpy(cmd_original, cmd, sizeof(cmd));
-
+                /*Make 3 versions of cmd for parsing*/
+                memcpy(cmd_pl_Copy, cmd, sizeof(cmd));
+                memcpy(cmd_rd_Copy, cmd, sizeof(cmd));
 
                 /*Remove trailing newline from command line*/
                 nl = strchr(cmd, '\n');
                 if (nl)
                         *nl = '\0';
 
-                /*Make 3 versions of cmd for parsing*/
-                memcpy(cmd_pl_Copy, cmd, sizeof(cmd));
-                memcpy(cmd_rd_Copy, cmd, sizeof(cmd));
-
-                /*Get the characters into an array words*/        
+                /*Set all the value of arguments to NULL*/        
                 memset(argv, '\0', sizeof(argv));
                 memset(argPL, '\0', sizeof(argPL));
                 memset(argRD, '\0', sizeof(argRD));
                 
+                /*Get the characters into an array words*/
                 int value = ConvertToWords(cmd, argv) + 1;
                 int hasPipe = ParsePL(cmd_pl_Copy, argPL) + 1;
                 int hasRedir = ParseRD(cmd_rd_Copy, argRD) + 1;
@@ -165,14 +170,15 @@ int main(void)
                         /* Builtin command */
                         if (!strcmp(argsWithoutNull[0], "exit")) {
                                 fprintf(stderr, "Bye...\n");
+                                exit_bool = true;
                                 //Execute a command which implements the exit command 
                                 break;
                         }
+
                         /* Regular command */
                         for (int i = 0; i < sizeOfArgv; i++) {
                                 printf("| %s | ", argsWithoutNull[i]);
                         }
-                        printf("%ld", sizeof(argsWithoutNull) / sizeof(char));
                         printf("\n");
 
                         pid = fork();
@@ -196,25 +202,42 @@ int main(void)
                         //If redir:
                         //TODO: Check if its redir appending
                         //Implementation of redir
-                        sizeOfRedir = hasRedir;
+                        sizeOfRedir = hasRedir - 1;
                         char* redirArgsTrim[sizeOfRedir]; //Should be size = 2
+                        char* argvCommandsRedirect[MAX_ARGS];
                         CopyCharArray(redirArgsTrim, argRD, sizeOfRedir);
+                        structCmd.isRedirect = true;
+                        
                         for (int i = 0; i < sizeOfRedir; i++) {
-                                printf("[ %s ] ", redirArgsTrim[i]);
+                                int sizeOfCommands = ConvertToWords(redirArgsTrim[i], argvCommandsRedirect) + 1;
+                                CopyCharArray(structCmd.array_commands[i].args, argvCommandsRedirect, sizeOfCommands);
+                                for(int j=0;j<sizeOfCommands;j++){
+                                        printf("{ %s } ", structCmd.array_commands[i].args[j]);
+                                }
+                                printf("command \n");
+
                         }
-                        printf("%ld", sizeof(redirArgsTrim) / sizeof(char));
+                        printf("%d", sizeOfRedir);
                         printf("\n");
                 }
                 else if (hasPipe > 0 && hasRedir == 0) {
                         //If pipe:
                         //Implementation of piping
-                        sizeOfPipe = hasPipe;
+                        char* argvCommandsPipe[MAX_ARGS];
+                        sizeOfPipe = hasPipe - 1;
                         char* pipeArgsTrim[sizeOfPipe];
                         CopyCharArray(pipeArgsTrim, argPL, sizeOfPipe);
                         for (int i = 0; i < sizeOfPipe; i++) {
-                                printf("{ %s } ", pipeArgsTrim[i]);
+                                int sizeOfCommands = ConvertToWords(pipeArgsTrim[i], argvCommandsPipe) + 1;
+                                CopyCharArray(structCmd.array_commands[i].args, argvCommandsPipe, sizeOfCommands);
+                                for(int j=0;j<sizeOfCommands;j++){
+                                        printf("{ %s } ", structCmd.array_commands[i].args[j]);
+                                }
+                                printf("command \n");
+
                         }
-                        printf("%ld", sizeof(pipeArgsTrim) / sizeof(char));
+                        //divide those commands to struct
+                        printf("%d", sizeOfPipe);
                         printf("\n");
                 }
                 else {
