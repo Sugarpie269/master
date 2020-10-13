@@ -20,12 +20,14 @@ enum PARSING_ERRORS{
 
 struct command{
         char *args[MAX_ARGS];
+        int numberOfArguments;
 };
 
 struct CommandLine{
         struct command array_commands[MAX_ARGS];
         bool isRedirect;
         bool isPipe;
+        int numberOfCommands;
 };
 
 
@@ -100,6 +102,14 @@ void CopyCharArray(char *argsWithoutNull[], char *argv[], int sizeOfArgv){
         argsWithoutNull[sizeOfArgv] = NULL;
 }
 
+
+void Redirection(const struct CommandLine structCmd){
+        if(structCmd.array_commands!=NULL){
+                printf("Not Empty\n");
+        }
+}
+
+
 int main(void)
 {
         char cmd[CMDLINE_MAX];
@@ -115,8 +125,7 @@ int main(void)
 
         while (1 && exit_bool == false) {
                 char *nl;
-                int status, sizeOfArgv;
-                int sizeOfRedir, sizeOfPipe;
+                int status;
                 pid_t pid;
                 struct CommandLine structCmd;
 
@@ -150,25 +159,27 @@ int main(void)
                 memset(argRD, '\0', sizeof(argRD));
                 
                 /*Get the characters into an array words*/
-                int value = ConvertToWords(cmd, argv) + 1;
+                int value = ConvertToWords(cmd, argv);
                 int hasPipe = ParsePL(cmd_pl_Copy, argPL) + 1;
                 int hasRedir = ParseRD(cmd_rd_Copy, argRD) + 1;
 
                 printf("value = %d, PL = %d, RD = %d \n", value, hasPipe, hasRedir);
 
                 if (hasPipe == 0 && hasRedir == 0) {
+                        structCmd.isPipe = false;
+                        structCmd.isRedirect = false;
+                        structCmd.numberOfCommands = 1;
                         
                         if (value == TOO_MANY_ARGS + 1) {
                                 fprintf(stderr, "Error: too many process arguments");
                         }
                         else {
-                                sizeOfArgv = value;
+                                structCmd.array_commands[0].numberOfArguments = value;
                         }
-                        char* argsWithoutNull[sizeOfArgv];
-                        CopyCharArray(argsWithoutNull, argv, sizeOfArgv);
+                        CopyCharArray(structCmd.array_commands[0].args, argv, structCmd.array_commands[0].numberOfArguments);
 
                         /* Builtin command */
-                        if (!strcmp(argsWithoutNull[0], "exit")) {
+                        if (!strcmp(structCmd.array_commands[0].args[0], "exit")) {
                                 fprintf(stderr, "Bye...\n");
                                 exit_bool = true;
                                 //Execute a command which implements the exit command 
@@ -176,15 +187,15 @@ int main(void)
                         }
 
                         /* Regular command */
-                        for (int i = 0; i < sizeOfArgv; i++) {
-                                printf("| %s | ", argsWithoutNull[i]);
+                        for (int i = 0; i < structCmd.array_commands[0].numberOfArguments; i++) {
+                                printf("| %s | ", structCmd.array_commands[0].args[i]);
                         }
                         printf("\n");
 
                         pid = fork();
                         if (pid == 0) {
                                 /* Child Process*/
-                                execvp(argsWithoutNull[0], &argsWithoutNull[0]);
+                                execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
                                 perror("evecvp error in child");
                         }
                         else if (pid > 0) {
@@ -202,49 +213,50 @@ int main(void)
                         //If redir:
                         //TODO: Check if its redir appending
                         //Implementation of redir
-                        sizeOfRedir = hasRedir - 1;
-                        char* redirArgsTrim[sizeOfRedir]; //Should be size = 2
-                        char* argvCommandsRedirect[MAX_ARGS];
-                        CopyCharArray(redirArgsTrim, argRD, sizeOfRedir);
                         structCmd.isRedirect = true;
+                        structCmd.numberOfCommands = hasRedir - 1;
+                        char* redirArgsTrim[structCmd.numberOfCommands]; //Should be size = 2
+                        char* argvCommandsRedirect[MAX_ARGS];
+                        CopyCharArray(redirArgsTrim, argRD, structCmd.numberOfCommands);
                         
-                        for (int i = 0; i < sizeOfRedir; i++) {
-                                int sizeOfCommands = ConvertToWords(redirArgsTrim[i], argvCommandsRedirect) + 1;
-                                CopyCharArray(structCmd.array_commands[i].args, argvCommandsRedirect, sizeOfCommands);
-                                for(int j=0;j<sizeOfCommands;j++){
+                        for (int i = 0; i < structCmd.numberOfCommands; i++) {
+                                structCmd.array_commands[i].numberOfArguments = ConvertToWords(redirArgsTrim[i], argvCommandsRedirect) + 1;
+                                CopyCharArray(structCmd.array_commands[i].args, argvCommandsRedirect, structCmd.array_commands[i].numberOfArguments);
+                                for(int j=0;j<structCmd.array_commands[i].numberOfArguments;j++){
                                         printf("{ %s } ", structCmd.array_commands[i].args[j]);
                                 }
-                                printf("command \n");
-
                         }
-                        printf("%d", sizeOfRedir);
+
+                        printf("%d", structCmd.numberOfCommands);
+
+                        Redirection(structCmd);
+
                         printf("\n");
                 }
                 else if (hasPipe > 0 && hasRedir == 0) {
                         //If pipe:
                         //Implementation of piping
                         char* argvCommandsPipe[MAX_ARGS];
-                        sizeOfPipe = hasPipe - 1;
-                        char* pipeArgsTrim[sizeOfPipe];
-                        CopyCharArray(pipeArgsTrim, argPL, sizeOfPipe);
-                        for (int i = 0; i < sizeOfPipe; i++) {
-                                int sizeOfCommands = ConvertToWords(pipeArgsTrim[i], argvCommandsPipe) + 1;
-                                CopyCharArray(structCmd.array_commands[i].args, argvCommandsPipe, sizeOfCommands);
-                                for(int j=0;j<sizeOfCommands;j++){
+                        structCmd.numberOfCommands = hasPipe - 1;
+                        char* pipeArgsTrim[structCmd.numberOfCommands];
+                        CopyCharArray(pipeArgsTrim, argPL, structCmd.numberOfCommands);
+                        for (int i = 0; i < structCmd.numberOfCommands; i++) {
+                                structCmd.array_commands[i].numberOfArguments = ConvertToWords(pipeArgsTrim[i], argvCommandsPipe) + 1;
+                                CopyCharArray(structCmd.array_commands[i].args, argvCommandsPipe, structCmd.array_commands[i].numberOfArguments);
+                                for(int j=0;j<structCmd.array_commands[i].numberOfArguments;j++){
                                         printf("{ %s } ", structCmd.array_commands[i].args[j]);
                                 }
-                                printf("command \n");
-
                         }
+
                         //divide those commands to struct
-                        printf("%d", sizeOfPipe);
+                        printf("%d", structCmd.numberOfCommands);
                         printf("\n");
                 }
                 else {
                         //If both:
                         //After checking only 1 redir and less than 3 pipes
-                        sizeOfPipe = hasPipe;
-                        sizeOfRedir = hasRedir;
+                        int sizeOfPipe = hasPipe;
+                        int sizeOfRedir = hasRedir;
                         char* pipeArgsTrim[sizeOfPipe];
                         char* redirArgsTrim[sizeOfRedir]; //Should be size = 2
 
