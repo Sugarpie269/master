@@ -11,12 +11,18 @@
 #define MAX_PIPE_LINE 3
 #define MAX_PATH 32
 
+#define EXIT "exit"
+#define CD "cd"
+#define PWD "pwd"
+
 enum PARSING_ERRORS{
         TOO_MANY_ARGS = -1,
         MISSING_COMMAND = -2,
         NO_OUTPUT_FILE = -3,
         CANNOT_OPEN_OUTPUT_FILE = -4,
         MISCLOCATED_OUTPUT_REDIRECTION = -5,
+        NO_DIRECTORY = -6,
+        EXIT_ERROR = -7,
 }; 
 
 enum DELIMS{
@@ -74,6 +80,20 @@ void Redirection(const struct CommandLine structCmd){
         if(structCmd.array_commands!=NULL){
                 printf("Not Empty\n");
         }
+}
+
+int PrintErr(int enum_error, char cmd[], int status){
+        if(enum_error == NO_DIRECTORY){
+                fprintf(stderr, "Error: No such directory.\n");
+        }else if(enum_error == TOO_MANY_ARGS){
+                fprintf(stderr, "Error: too many process arguments\n");
+                return 0;
+        }else if(enum_error == EXIT_ERROR){
+                fprintf(stderr, "Bye...\n");
+        }
+        cmd[strlen(cmd) - 1] = '\0';
+        fprintf(stderr, "+ completed '%s' [%d]\n", cmd, status);
+        return 0;
 }
 
 
@@ -149,8 +169,8 @@ int main(void)
                         structCmd.isRedirect = false;
                         structCmd.numberOfCommands = 1;
                         
-                        if (value == TOO_MANY_ARGS + 1) {
-                                fprintf(stderr, "Error: too many process arguments");
+                        if (value == TOO_MANY_ARGS) {
+                                PrintErr(TOO_MANY_ARGS, cmd_original, 1);
                         }
                         else {
                                 structCmd.array_commands[0].numberOfArguments = value;
@@ -160,39 +180,32 @@ int main(void)
                         /* Builtin command */
 
                         /*exit*/
-                        if (!strcmp(structCmd.array_commands[0].args[0], "exit")) {
-                                fprintf(stderr, "Bye...\n");
+                        if (!strcmp(structCmd.array_commands[0].args[0], EXIT)) {
+                                PrintErr(EXIT_ERROR, cmd_original, 0);
                                 exit_bool = true;
-                                //Execute a command which implements the exit command 
                                 break;
                         }
 
                         /*cd*/
-                        if (!strcmp(structCmd.array_commands[0].args[0], "cd")) {
+                        if (!strcmp(structCmd.array_commands[0].args[0], CD)) {
                                 //TODO: Error checking with changing directories
                                 int eNotDir;
                                 getcwd(cwd, sizeof(cwd));
-                                //printf("Change CWD from '%s' to '%s'\n", cwd, argsWithoutNull[1]);
                                 eNotDir = chdir(structCmd.array_commands[0].args[1]);
                                 if (eNotDir == -1) {
-                                        fprintf(stderr, "Error: No such directory.\n");
+                                        status = 1;
+                                        PrintErr(NO_DIRECTORY, cmd_original, status);
                                         //TODO: Figure dif between cannot cd into vs no such directory
                                 }
                                 continue;
                         }
 
                         /*pwd*/
-                        if (!strcmp(structCmd.array_commands[0].args[0], "pwd")) {
+                        if (!strcmp(structCmd.array_commands[0].args[0], PWD)) {
                                 getcwd(cwd, sizeof(cwd));
                                 printf("%s\n", cwd);
                                 continue;
                         }
-
-                        /* Regular command */
-                        for (int i = 0; i < structCmd.array_commands[0].numberOfArguments; i++) {
-                                printf("| %s | ", structCmd.array_commands[0].args[i]);
-                        }
-                        printf("\n");
 
                         pid = fork();
                         if (pid == 0) {
@@ -203,8 +216,7 @@ int main(void)
                         else if (pid > 0) {
                                 /* Parent Process*/
                                 waitpid(pid == P_PID, &status, 0);
-                                cmd_original[strlen(cmd_original) - 1] = '\0';
-                                fprintf(stderr, "+ completed '%s' [%d]\n", cmd_original, status);
+                                PrintErr(0, cmd_original, status);
                         }
                         else {
                                 perror("fork");
