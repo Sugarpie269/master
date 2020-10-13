@@ -9,6 +9,7 @@
 #define CMDLINE_MAX 512
 #define MAX_ARGS 17
 #define MAX_PIPE_LINE 3
+#define MAX_PATH 32
 
 enum PARSING_ERRORS{
         TOO_MANY_ARGS = -1,
@@ -116,6 +117,7 @@ int main(void)
         char cmd_original[CMDLINE_MAX];
         char cmd_pl_Copy[CMDLINE_MAX];
         char cmd_rd_Copy[CMDLINE_MAX];
+        char cwd[MAX_PATH];
         char *argv[MAX_ARGS];
         char *argPL[MAX_ARGS];
         char *argRD[MAX_ARGS];
@@ -193,7 +195,22 @@ int main(void)
                                 //Execute a command which implements the exit command 
                                 break;
                         }
-
+                        if (!strcmp(structCmd.array_commands[0].args[0], "cd")) {
+                                //TODO: Error checking with changing directories
+                                int eNotDir;
+                                getcwd(cwd, sizeof(cwd));
+                                //printf("Change CWD from '%s' to '%s'\n", cwd, argsWithoutNull[1]);
+                                eNotDir = chdir(structCmd.array_commands[0].args[1]);
+                                if (eNotDir == -1) {
+                                        fprintf(stderr, "Error: No such directory.\n");
+                                        //TODO: Figure dif between cannot cd into vs no such directory
+                                }
+                                continue;
+                        }
+                        if (!strcmp(structCmd.array_commands[0].args[0], "pwd")) {
+                                getcwd(cwd, sizeof(cwd));
+                                printf("%s\n", cwd);
+                                continue;
                         /* Regular command */
                         for (int i = 0; i < structCmd.array_commands[0].numberOfArguments; i++) {
                                 printf("| %s | ", structCmd.array_commands[0].args[i]);
