@@ -123,7 +123,7 @@ int main(void)
         
 
 
-        while (1 && exit_bool == false) {
+        while (exit_bool == false) {
                 char *nl;
                 int status;
                 pid_t pid;
