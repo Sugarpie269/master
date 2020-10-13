@@ -217,8 +217,10 @@ int main(void)
                         //Implementation of redir
                         structCmd.isRedirect = true;
                         structCmd.numberOfCommands = hasRedir;
+
                         char* redirArgsTrim[structCmd.numberOfCommands]; //Should be size = 2
                         char* argvCommandsRedirect[MAX_ARGS];
+
                         CopyCharArray(redirArgsTrim, argRD, structCmd.numberOfCommands);
                         
                         for (int i = 0; i < structCmd.numberOfCommands; i++) {
@@ -238,10 +240,14 @@ int main(void)
                 else if (hasPipe > -1 && hasRedir == -1) {
                         //If pipe:
                         //Implementation of piping
-                        char* argvCommandsPipe[MAX_ARGS];
+                        structCmd.isPipe = true;
                         structCmd.numberOfCommands = hasPipe;
+
                         char* pipeArgsTrim[structCmd.numberOfCommands];
+                        char* argvCommandsPipe[MAX_ARGS];
+                        
                         CopyCharArray(pipeArgsTrim, argPL, structCmd.numberOfCommands);
+                        
                         for (int i = 0; i < structCmd.numberOfCommands; i++) {
                                 structCmd.array_commands[i].numberOfArguments = ConvertToWords(pipeArgsTrim[i], argvCommandsPipe, delim_space) + 1;
                                 CopyCharArray(structCmd.array_commands[i].args, argvCommandsPipe, structCmd.array_commands[i].numberOfArguments);
