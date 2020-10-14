@@ -40,6 +40,7 @@ struct command{
 
 struct CommandLine{
         struct command array_commands[MAX_ARGS];
+        char cmd[CMDLINE_MAX];
         bool isRedirect;
         bool isPipe;
         int numberOfCommands;
@@ -71,11 +72,22 @@ int ConvertToWords(char cmd[], char *argv[], const char delim[]){
 void CopyCharArray(char *argsWithoutNull[], char *argv[], int sizeOfArgv){
         for(int i=0;i<sizeOfArgv;i++){
                 argsWithoutNull[i] = argv[i];
-                //printf("%s", argsWithoutNull[i]);
         }
         argsWithoutNull[sizeOfArgv] = NULL;
 }
 
+int PrintErr(int enum_error, struct CommandLine structCmd, int status){
+        if(enum_error == NO_DIRECTORY){
+                fprintf(stderr, "Error: No such directory.\n");
+        }else if(enum_error == TOO_MANY_ARGS){
+                fprintf(stderr, "Error: too many process arguments\n");
+                return 0;
+        }else if(enum_error == EXIT_ERROR){
+                fprintf(stderr, "Bye...\n");
+        }
+        fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, status);
+        return 0;
+}
 
 void Redirection(const struct CommandLine structCmd){
         int status;
@@ -91,7 +103,7 @@ void Redirection(const struct CommandLine structCmd){
 
         if (pid == 0) {
                 /* Child Process*/
-                fd = open(structCmd.array_commands[0].args[1], O_WRONLY, 0644);
+                fd = open(structCmd.array_commands[1].args[0], O_WRONLY, 0644);
                 if (fd == -1){
                         perror("Error: cannot open output file");
                 }
@@ -106,7 +118,7 @@ void Redirection(const struct CommandLine structCmd){
         else if (pid > 0) {
                 /* Parent Process*/
                 waitpid(pid == P_PID, &status, 0);
-                PrintErr(0, cmd_original, status);
+                PrintErr(0, structCmd, status);
         }
         else {
                 perror("fork failed");
@@ -114,19 +126,7 @@ void Redirection(const struct CommandLine structCmd){
         }
 }
 
-int PrintErr(int enum_error, char cmd[], int status){
-        if(enum_error == NO_DIRECTORY){
-                fprintf(stderr, "Error: No such directory.\n");
-        }else if(enum_error == TOO_MANY_ARGS){
-                fprintf(stderr, "Error: too many process arguments\n");
-                return 0;
-        }else if(enum_error == EXIT_ERROR){
-                fprintf(stderr, "Bye...\n");
-        }
-        cmd[strlen(cmd) - 1] = '\0';
-        fprintf(stderr, "+ completed '%s' [%d]\n", cmd, status);
-        return 0;
-}
+
 
 
 int main(void)
@@ -135,6 +135,7 @@ int main(void)
         char cmd_original[CMDLINE_MAX];
         char cmd_pl_Copy[CMDLINE_MAX];
         char cmd_rd_Copy[CMDLINE_MAX];
+        char cmd_struct[CMDLINE_MAX];
         char cwd[MAX_PATH];
         char *argv[MAX_ARGS];
         char *argPL[MAX_ARGS];
@@ -170,6 +171,7 @@ int main(void)
                 /*Make 3 versions of cmd for parsing*/
                 memcpy(cmd_pl_Copy, cmd, sizeof(cmd));
                 memcpy(cmd_rd_Copy, cmd, sizeof(cmd));
+                memcpy(cmd_struct, cmd, sizeof(cmd));
 
                 /*Remove trailing newline from command line*/
                 nl = strchr(cmd, '\n');
@@ -190,6 +192,8 @@ int main(void)
                 memset(argRD, '\0', sizeof(argRD));
                 
                 /*Get the characters into an array words*/
+                cmd_struct[strlen(cmd_struct) - 1] = '\0';
+                strcpy(structCmd.cmd, cmd_struct);
                 int value = ConvertToWords(cmd, argv, delim_space);
                 int hasPipe = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe);
                 int hasRedir = ConvertToWords(cmd_rd_Copy, argRD, delim_redirect);
@@ -202,7 +206,7 @@ int main(void)
                         structCmd.numberOfCommands = 1;
                         
                         if (value == TOO_MANY_ARGS) {
-                                PrintErr(TOO_MANY_ARGS, cmd_original, 1);
+                                PrintErr(TOO_MANY_ARGS, structCmd, 1);
                         }
                         else {
                                 structCmd.array_commands[0].numberOfArguments = value;
@@ -213,7 +217,7 @@ int main(void)
 
                         /*exit*/
                         if (!strcmp(structCmd.array_commands[0].args[0], EXIT)) {
-                                PrintErr(EXIT_ERROR, cmd_original, 0);
+                                PrintErr(EXIT_ERROR, structCmd, 0);
                                 exit_bool = true;
                                 break;
                         }
@@ -226,7 +230,7 @@ int main(void)
                                 eNotDir = chdir(structCmd.array_commands[0].args[1]);
                                 if (eNotDir == -1) {
                                         status = 1;
-                                        PrintErr(NO_DIRECTORY, cmd_original, status);
+                                        PrintErr(NO_DIRECTORY, structCmd, status);
                                         //TODO: Figure dif between cannot cd into vs no such directory
                                 }
                                 continue;
@@ -248,7 +252,7 @@ int main(void)
                         else if (pid > 0) {
                                 /* Parent Process*/
                                 waitpid(pid == P_PID, &status, 0);
-                                PrintErr(0, cmd_original, status);
+                                PrintErr(0, structCmd, status);
                         }
                         else {
                                 perror("fork");
@@ -261,6 +265,7 @@ int main(void)
                         //Implementation of redir
                         structCmd.isRedirect = true;
                         structCmd.numberOfCommands = hasRedir;
+                        //strcpy(structCmd.cmd, cmd_rd_Copy);
 
                         char* redirArgsTrim[structCmd.numberOfCommands]; //Should be size = 2
                         char* argvCommandsRedirect[MAX_ARGS];
