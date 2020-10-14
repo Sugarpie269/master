@@ -98,6 +98,13 @@ void FindPipeRedir(struct CommandLine *structCmd){
         }
 }
 
+void RemoveTrailingSpace(char cmd[]){
+        char *nl;
+        nl = strchr(cmd, '\n');
+                if (nl)
+                        *nl = '\0';
+}
+
 void Redirection(const struct CommandLine structCmd){
         int status;
         pid_t pid;
@@ -157,7 +164,6 @@ int main(void)
 
 
         while (exit_bool == false) {
-                char *nl;
                 int status;
                 pid_t pid;
                 struct CommandLine structCmd;
@@ -176,25 +182,19 @@ int main(void)
                         fflush(stdout);
                 }
 
-                /*Copy cmd to a new cmd*/
-                memcpy(cmd_original, cmd, sizeof(cmd));
+
                 /*Make 3 versions of cmd for parsing*/
+                memcpy(cmd_original, cmd, sizeof(cmd));
                 memcpy(cmd_pl_Copy, cmd, sizeof(cmd));
                 memcpy(cmd_rd_Copy, cmd, sizeof(cmd));
                 memcpy(cmd_struct, cmd, sizeof(cmd));
 
                 /*Remove trailing newline from command line*/
-                nl = strchr(cmd, '\n');
-                if (nl)
-                        *nl = '\0';
+                RemoveTrailingSpace(cmd);
+                RemoveTrailingSpace(cmd_pl_Copy);
+                RemoveTrailingSpace(cmd_rd_Copy);
 
-                nl = strchr(cmd_pl_Copy, '\n');
-                if (nl)
-                        *nl = '\0';
-
-                nl = strchr(cmd_rd_Copy, '\n');
-                if (nl)
-                        *nl = '\0';
+                
 
                 /*Set all the value of arguments to NULL*/        
                 memset(argv, '\0', sizeof(argv));
