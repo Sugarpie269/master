@@ -5,6 +5,7 @@
 #include <sys/types.h> 
 #include <sys/wait.h> 
 #include <stdbool.h>
+#include <fcntl.h>
 
 #define CMDLINE_MAX 512
 #define MAX_ARGS 17
@@ -77,8 +78,39 @@ void CopyCharArray(char *argsWithoutNull[], char *argv[], int sizeOfArgv){
 
 
 void Redirection(const struct CommandLine structCmd){
+        int status;
+        pid_t pid;
+        int fd;
+
         if(structCmd.array_commands!=NULL){
                 printf("Not Empty\n");
+                fflush(stdout);
+        }
+
+        pid = fork();
+
+        if (pid == 0) {
+                /* Child Process*/
+                fd = open(structCmd.array_commands[0].args[1], O_WRONLY, 0644);
+                if (fd == -1){
+                        perror("Error: cannot open output file");
+                }
+                else {
+                        dup2(fd, STDOUT_FILENO);    
+                        close(fd); 
+                        execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
+                        perror("evecvp error in child");
+                }
+                
+        }
+        else if (pid > 0) {
+                /* Parent Process*/
+                waitpid(pid == P_PID, &status, 0);
+                PrintErr(0, cmd_original, status);
+        }
+        else {
+                perror("fork failed");
+                exit(1);
         }
 }
 
@@ -96,22 +128,6 @@ int PrintErr(int enum_error, char cmd[], int status){
         return 0;
 }
 
-int Builtin_cd(char cwd[], size_t sizeOfChar, struct CommandLine structCmd){
-        getcwd(cwd, sizeOfChar);
-        return chdir(structCmd.array_commands[0].args[1]);
-}
-
-void Builtin_pwd(char cwd[], size_t sizeOfChar){
-        getcwd(cwd, sizeOfChar);
-        printf("%s\n", cwd);
-}
-
-void RemoveTrailing(char cmd[]){
-        char *nl;
-        nl = strchr(cmd, '\n');
-                if (nl)
-                        *nl = '\0';
-}
 
 int main(void)
 {
@@ -131,7 +147,7 @@ int main(void)
 
 
         while (exit_bool == false) {
-                //char *nl;
+                char *nl;
                 int status;
                 pid_t pid;
                 struct CommandLine structCmd;
@@ -149,15 +165,24 @@ int main(void)
                         fflush(stdout);
                 }
 
-                /*Make 3 versions of cmd for parsing*/
+                /*Copy cmd to a new cmd*/
                 memcpy(cmd_original, cmd, sizeof(cmd));
+                /*Make 3 versions of cmd for parsing*/
                 memcpy(cmd_pl_Copy, cmd, sizeof(cmd));
                 memcpy(cmd_rd_Copy, cmd, sizeof(cmd));
 
                 /*Remove trailing newline from command line*/
-                RemoveTrailing(cmd);
-                RemoveTrailing(cmd_pl_Copy);
-                RemoveTrailing(cmd_rd_Copy);
+                nl = strchr(cmd, '\n');
+                if (nl)
+                        *nl = '\0';
+
+                nl = strchr(cmd_pl_Copy, '\n');
+                if (nl)
+                        *nl = '\0';
+
+                nl = strchr(cmd_rd_Copy, '\n');
+                if (nl)
+                        *nl = '\0';
 
                 /*Set all the value of arguments to NULL*/        
                 memset(argv, '\0', sizeof(argv));
@@ -195,15 +220,22 @@ int main(void)
 
                         /*cd*/
                         if (!strcmp(structCmd.array_commands[0].args[0], CD)) {
-                                if (Builtin_cd(cwd, sizeof(cwd), structCmd) == -1) {
-                                        PrintErr(NO_DIRECTORY, cmd_original, 1);
+                                //TODO: Error checking with changing directories
+                                int eNotDir;
+                                getcwd(cwd, sizeof(cwd));
+                                eNotDir = chdir(structCmd.array_commands[0].args[1]);
+                                if (eNotDir == -1) {
+                                        status = 1;
+                                        PrintErr(NO_DIRECTORY, cmd_original, status);
+                                        //TODO: Figure dif between cannot cd into vs no such directory
                                 }
                                 continue;
                         }
 
                         /*pwd*/
                         if (!strcmp(structCmd.array_commands[0].args[0], PWD)) {
-                                Builtin_pwd(cwd, sizeof(cwd));
+                                getcwd(cwd, sizeof(cwd));
+                                printf("%s\n", cwd);
                                 continue;
                         }
 
