@@ -89,6 +89,15 @@ int PrintErr(int enum_error, struct CommandLine structCmd, int status){
         return 0;
 }
 
+void FindPipeRedir(struct CommandLine *structCmd){
+        int pipe = 124;
+        int redirect = 62;
+        for(int i=0;i<(int)strlen(structCmd->cmd);i++){
+                if(structCmd->cmd[i] == pipe) structCmd->isPipe = true;
+                if(structCmd->cmd[i] == redirect) structCmd->isRedirect = true;
+        }
+}
+
 void Redirection(const struct CommandLine structCmd){
         int status;
         pid_t pid;
@@ -103,7 +112,7 @@ void Redirection(const struct CommandLine structCmd){
 
         if (pid == 0) {
                 /* Child Process*/
-                fd = open(structCmd.array_commands[1].args[0], O_WRONLY, 0644);
+                fd = open(structCmd.array_commands[1].args[0], O_WRONLY | O_TRUNC, 0644);
                 if (fd == -1){
                         perror("Error: cannot open output file");
                 }
@@ -153,6 +162,7 @@ int main(void)
                 pid_t pid;
                 struct CommandLine structCmd;
 
+
                 /* Print prompt */
                 printf("sshell$ ");
                 fflush(stdout);
@@ -194,22 +204,16 @@ int main(void)
                 /*Get the characters into an array words*/
                 cmd_struct[strlen(cmd_struct) - 1] = '\0';
                 strcpy(structCmd.cmd, cmd_struct);
-                int value = ConvertToWords(cmd, argv, delim_space);
-                int hasPipe = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe);
-                int hasRedir = ConvertToWords(cmd_rd_Copy, argRD, delim_redirect);
+                structCmd.isPipe = false;
+                structCmd.isRedirect = false;
+                FindPipeRedir(&structCmd);
 
-                printf("value = %d, PL = %d, RD = %d \n", value, hasPipe, hasRedir);
-
-                if (hasPipe == -1 && hasRedir == -1) {
-                        structCmd.isPipe = false;
-                        structCmd.isRedirect = false;
+                if (structCmd.isPipe == false && structCmd.isRedirect == false) {
                         structCmd.numberOfCommands = 1;
-                        
-                        if (value == TOO_MANY_ARGS) {
+                        structCmd.array_commands[0].numberOfArguments = ConvertToWords(cmd, argv, delim_space);
+                        if (structCmd.array_commands[0].numberOfArguments == TOO_MANY_ARGS) {
                                 PrintErr(TOO_MANY_ARGS, structCmd, 1);
-                        }
-                        else {
-                                structCmd.array_commands[0].numberOfArguments = value;
+                                break;
                         }
                         CopyCharArray(structCmd.array_commands[0].args, argv, structCmd.array_commands[0].numberOfArguments);
 
@@ -259,12 +263,11 @@ int main(void)
                                 exit(1);
                         }
                 }
-                else if (hasPipe == -1 && hasRedir > -1) {
+                else if (structCmd.isPipe == false && structCmd.isRedirect == true) {
                         //If redir:
                         //TODO: Check if its redir appending
                         //Implementation of redir
-                        structCmd.isRedirect = true;
-                        structCmd.numberOfCommands = hasRedir;
+                        structCmd.numberOfCommands = ConvertToWords(cmd_rd_Copy, argRD, delim_redirect);
                         //strcpy(structCmd.cmd, cmd_rd_Copy);
 
                         char* redirArgsTrim[structCmd.numberOfCommands]; //Should be size = 2
@@ -286,11 +289,10 @@ int main(void)
 
                         printf("\n");
                 }
-                else if (hasPipe > -1 && hasRedir == -1) {
+                else if (structCmd.isPipe == true && structCmd.isRedirect == false) {
                         //If pipe:
                         //Implementation of piping
-                        structCmd.isPipe = true;
-                        structCmd.numberOfCommands = hasPipe;
+                        structCmd.numberOfCommands = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe);
 
                         char* pipeArgsTrim[structCmd.numberOfCommands];
                         char* argvCommandsPipe[MAX_ARGS];
@@ -312,8 +314,8 @@ int main(void)
                 else {
                         //If both:
                         //After checking only 1 redir and less than 3 pipes
-                        int sizeOfPipe = hasPipe;
-                        int sizeOfRedir = hasRedir;
+                        int sizeOfPipe = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe);
+                        int sizeOfRedir = ConvertToWords(cmd_rd_Copy, argRD, delim_redirect);
                         char* pipeArgsTrim[sizeOfPipe];
                         char* redirArgsTrim[sizeOfRedir]; //Should be size = 2
 
