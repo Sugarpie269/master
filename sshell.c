@@ -1,11 +1,13 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include <sys/types.h> 
 #include <sys/wait.h> 
+#include <sys/stat.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
 #include <stdbool.h>
 #include <fcntl.h>
+#include <dirent.h>
 
 #define CMDLINE_MAX 512
 #define MAX_ARGS 17
@@ -15,6 +17,11 @@
 #define EXIT "exit"
 #define CD "cd"
 #define PWD "pwd"
+#define SLS "sls"
+#define delim_space " "
+#define delim_pipe "|"
+#define delim_redirect ">"
+#define current "."
 
 enum PARSING_ERRORS{
         TOO_MANY_ARGS = -1,
@@ -24,6 +31,7 @@ enum PARSING_ERRORS{
         MISCLOCATED_OUTPUT_REDIRECTION = -5,
         NO_DIRECTORY = -6,
         EXIT_ERROR = -7,
+        NO_ERROR = -8,
 }; 
 
 enum DELIMS{
@@ -38,6 +46,11 @@ struct command{
         int numberOfArguments;
 };
 
+enum STATUS{
+        SUCCESS = 0,
+        FAILURE = 1,
+};
+
 struct CommandLine{
         struct command array_commands[MAX_ARGS];
         char cmd[CMDLINE_MAX];
@@ -45,7 +58,6 @@ struct CommandLine{
         bool isPipe;
         int numberOfCommands;
 };
-
 
 
 int ConvertToWords(char cmd[], char *argv[], const char delim[]){
@@ -85,7 +97,8 @@ int PrintErr(int enum_error, struct CommandLine structCmd, int status){
         }else if(enum_error == EXIT_ERROR){
                 fprintf(stderr, "Bye...\n");
         }
-        fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, status);
+
+        fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, WEXITSTATUS(status));
         return 0;
 }
 
@@ -143,7 +156,26 @@ void Redirection(const struct CommandLine structCmd){
 }
 
 
-
+int Builtin_sls(struct CommandLine structCmd){
+        struct dirent *dir_entry;
+        DIR *directory = opendir(current);
+        if(directory == NULL){
+                PrintErr(NO_DIRECTORY, structCmd, FAILURE);
+                return FAILURE;
+        }
+        while ((dir_entry = readdir(directory)) != NULL){
+                if(dir_entry->d_name[0] != current[0]){
+                        char cwd[MAX_PATH];
+                        getcwd(cwd, sizeof(cwd));
+                        struct stat sb;    
+                        strcat(cwd, "/");
+                        strcat(cwd, dir_entry->d_name);
+                        stat(cwd, &sb);
+                        printf("%s (%lld bytes)\n", dir_entry->d_name, (long long) sb.st_size);
+                }
+        }
+        return SUCCESS;
+}
 
 int main(void)
 {
@@ -157,9 +189,6 @@ int main(void)
         char *argPL[MAX_ARGS];
         char *argRD[MAX_ARGS];
         bool exit_bool = false;
-        const char delim_space[] = " ";
-        const char delim_pipe[] = "|";
-        const char delim_redirect[] = ">";
         
 
 
@@ -167,7 +196,6 @@ int main(void)
                 int status;
                 pid_t pid;
                 struct CommandLine structCmd;
-
 
                 /* Print prompt */
                 printf("sshell$ ");
@@ -228,14 +256,9 @@ int main(void)
 
                         /*cd*/
                         if (!strcmp(structCmd.array_commands[0].args[0], CD)) {
-                                //TODO: Error checking with changing directories
-                                int eNotDir;
                                 getcwd(cwd, sizeof(cwd));
-                                eNotDir = chdir(structCmd.array_commands[0].args[1]);
-                                if (eNotDir == -1) {
-                                        status = 1;
-                                        PrintErr(NO_DIRECTORY, structCmd, status);
-                                        //TODO: Figure dif between cannot cd into vs no such directory
+                                if (chdir(structCmd.array_commands[0].args[1]) == -1) {
+                                        PrintErr(NO_DIRECTORY, structCmd, FAILURE);
                                 }
                                 continue;
                         }
@@ -244,19 +267,34 @@ int main(void)
                         if (!strcmp(structCmd.array_commands[0].args[0], PWD)) {
                                 getcwd(cwd, sizeof(cwd));
                                 printf("%s\n", cwd);
+                                PrintErr(NO_ERROR, structCmd, SUCCESS);
                                 continue;
                         }
+
+                        /*sls*/
+                        if (!strcmp(structCmd.array_commands[0].args[0], SLS)) {
+                                if (Builtin_sls(structCmd) == SUCCESS){
+                                        PrintErr(NO_ERROR, structCmd, SUCCESS);
+                                }
+                                continue;
+                        }
+
 
                         pid = fork();
                         if (pid == 0) {
                                 /* Child Process*/
                                 execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
-                                perror("evecvp error in child");
+                                
                         }
                         else if (pid > 0) {
                                 /* Parent Process*/
                                 waitpid(pid == P_PID, &status, 0);
-                                PrintErr(0, structCmd, status);
+                                if(WIFEXITED(status)!=0){
+                                     PrintErr(0, structCmd, status);   
+                                }else{
+                                        perror("evecvp error in child");
+                                }
+                                
                         }
                         else {
                                 perror("fork");
@@ -264,13 +302,11 @@ int main(void)
                         }
                 }
                 else if (structCmd.isPipe == false && structCmd.isRedirect == true) {
-                        //If redir:
-                        //TODO: Check if its redir appending
-                        //Implementation of redir
-                        structCmd.numberOfCommands = ConvertToWords(cmd_rd_Copy, argRD, delim_redirect);
-                        //strcpy(structCmd.cmd, cmd_rd_Copy);
 
-                        char* redirArgsTrim[structCmd.numberOfCommands]; //Should be size = 2
+                        structCmd.numberOfCommands = ConvertToWords(cmd_rd_Copy, argRD, delim_redirect);
+
+                        //numberOfCommands Should be = 2
+                        char* redirArgsTrim[structCmd.numberOfCommands]; 
                         char* argvCommandsRedirect[MAX_ARGS];
 
                         CopyCharArray(redirArgsTrim, argRD, structCmd.numberOfCommands);
@@ -290,7 +326,7 @@ int main(void)
                         printf("\n");
                 }
                 else if (structCmd.isPipe == true && structCmd.isRedirect == false) {
-                        //If pipe:
+
                         //Implementation of piping
                         structCmd.numberOfCommands = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe);
 
@@ -307,7 +343,6 @@ int main(void)
                                 }
                         }
 
-                        //divide those commands to struct
                         printf("%d", structCmd.numberOfCommands);
                         printf("\n");
                 }
