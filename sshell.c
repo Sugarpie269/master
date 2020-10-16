@@ -33,6 +33,8 @@ enum PARSING_ERRORS
         NO_DIRECTORY = -6,
         EXIT_ERROR = -7,
         NO_ERROR = -8,
+        CANNOT_CD_INTO_DIRECTORY = -9,
+        COMMAND_NOT_FOUND = -10,
 };
 
 enum DELIMS
@@ -43,17 +45,25 @@ enum DELIMS
         NUMBER_OF_DELIMS = 3,
 };
 
+enum STATUS
+{
+        SUCCESS = 0,
+        FAILURE = 1,
+};
+
+enum FD{
+        READ = 0,
+        WRITE = 1,
+        NUMBER_OF_FD = 2,
+};
+
 struct Command
 {
         char *args[MAX_ARGS];
         int numberOfArguments;
 };
 
-enum STATUS
-{
-        SUCCESS = 0,
-        FAILURE = 1,
-};
+
 
 struct CommandLine
 {
@@ -100,20 +110,40 @@ void CopyCharArray(char *argsWithoutNull[], char *argv[], int sizeOfArgv)
 
 int PrintErr(int enum_error, struct CommandLine structCmd, int status)
 {
-        if (enum_error == NO_DIRECTORY)
-        {
-                fprintf(stderr, "Error: No such directory.\n");
-        }
-        else if (enum_error == TOO_MANY_ARGS)
+        
+        
+        if (enum_error == TOO_MANY_ARGS)
         {
                 fprintf(stderr, "Error: too many process arguments\n");
                 return 0;
+        }else if(enum_error == MISSING_COMMAND){
+                fprintf(stderr, "Error: missing command\n");
+                return 0;
+        }else if(enum_error == NO_OUTPUT_FILE){
+                fprintf(stderr, "Error: no output file\n");
+                return 0;
+        }else if(enum_error == CANNOT_OPEN_OUTPUT_FILE){
+                fprintf(stderr, "Error: can not open output file\n");
+                return 0;
+        }else if(enum_error == MISCLOCATED_OUTPUT_REDIRECTION){
+                fprintf(stderr, "Error: mislocated output redirection\n");
+                return 0;
+        }
+        else if (enum_error == NO_DIRECTORY)
+        {
+                fprintf(stderr, "Error: No such directory.\n");
         }
         else if (enum_error == EXIT_ERROR)
         {
                 fprintf(stderr, "Bye...\n");
         }
-
+        else if(enum_error == CANNOT_CD_INTO_DIRECTORY){
+                fprintf(stderr, "Error: can not cd into directory\n");
+        }else if(enum_error == COMMAND_NOT_FOUND){
+                fprintf(stderr, "Error: command not found\n");
+                fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, 1);
+                return 0;
+        }
         fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, WEXITSTATUS(status));
         return 0;
 }
@@ -357,6 +387,7 @@ int main(void)
         char *argPL[MAX_ARGS];
         char *argRD[MAX_ARGS];
         bool exit_bool = false;
+        bool bad_command = false;
 
         while ((1) && exit_bool == false)
         {
@@ -430,7 +461,7 @@ int main(void)
                                         getcwd(cwd, sizeof(cwd));
                                         if (chdir(structCmd.array_commands[0].args[1]) == -1)
                                         {
-                                                PrintErr(NO_DIRECTORY, structCmd, FAILURE);
+                                                PrintErr(CANNOT_CD_INTO_DIRECTORY, structCmd, FAILURE);
                                         }
                                         continue;
                                 }
@@ -459,19 +490,19 @@ int main(void)
                                 if (pid == 0)
                                 {
                                         /* Child Process*/
-                                        execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
+                                        int child_status = execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
+                                        PrintErr(COMMAND_NOT_FOUND, structCmd, child_status);
+                                        bad_command = true;
+                                        //break;
+                                        kill(pid, SIGTERM);
+                                        _exit(1);
                                 }
                                 else if (pid > 0)
                                 {
                                         /* Parent Process*/
                                         waitpid(pid == P_PID, &status, 0);
-                                        if (WIFEXITED(status) != 0)
-                                        {
-                                                PrintErr(0, structCmd, status);
-                                        }
-                                        else
-                                        {
-                                                perror("evecvp error in child");
+                                        if(bad_command == false){
+                                                PrintErr(SUCCESS, structCmd, status);
                                         }
                                 }
                                 else
