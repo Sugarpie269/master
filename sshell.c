@@ -57,6 +57,11 @@ enum FD{
         NUMBER_OF_FD = 2,
 };
 
+enum REDIR_MODE {
+        TRUNCT = 0,
+        APPD = 1,
+};
+
 struct Command
 {
         char *args[MAX_ARGS];
@@ -71,6 +76,7 @@ struct CommandLine
         char cmd[CMDLINE_MAX];
         bool isRedirect;
         bool isPipe;
+        bool isRedirAppend;
         int numberOfCommands;
 };
 
@@ -152,12 +158,17 @@ void FindPipeRedir(struct CommandLine *structCmd)
 {
         int pipe = 124;
         int redirect = 62;
-        for (int i = 0; i < (int)strlen(structCmd->cmd); i++)
-        {
-                if (structCmd->cmd[i] == pipe)
+        for (int i = 0; i < (int)strlen(structCmd->cmd); i++) {
+                if (structCmd->cmd[i] == pipe) {
                         structCmd->isPipe = true;
-                if (structCmd->cmd[i] == redirect)
+                }
+                if (structCmd->cmd[i] == redirect) {
+                        if (structCmd->cmd[i + 1] == redirect) {
+                                structCmd->isRedirAppend = true;
+                        }
                         structCmd->isRedirect = true;
+                }
+
         }
 }
 
@@ -169,7 +180,7 @@ void RemoveTrailingSpace(char cmd[])
                 *nl = '\0';
 }
 
-void Redirection(const struct CommandLine structCmd)
+void Redirection(const struct CommandLine structCmd, int rd_mode)
 {
         int status;
         pid_t pid;
@@ -186,7 +197,13 @@ void Redirection(const struct CommandLine structCmd)
         if (pid == 0)
         {
                 /* Child Process*/
-                fd = open(structCmd.array_commands[1].args[0], O_WRONLY | O_TRUNC, 0644);
+                if (rd_mode == TRUNCT) {
+                        fd = open(structCmd.array_commands[1].args[0], O_WRONLY | O_TRUNC, 0644);
+                }
+                else {
+                        fd = open(structCmd.array_commands[1].args[0], O_WRONLY | O_APPEND, 0644);
+                }
+
                 if (fd == -1)
                 {
                         perror("Error: cannot open output file");
@@ -431,6 +448,7 @@ int main(void)
                 strcpy(structCmd.cmd, cmd_struct);
                 structCmd.isPipe = false;
                 structCmd.isRedirect = false;
+                structCmd.isRedirAppend = false;
                 FindPipeRedir(&structCmd);
                 if(structCmd.cmd[0] != '\0'){
 
@@ -533,9 +551,14 @@ int main(void)
                                         }
                                 }
 
-                                printf("%d", structCmd.numberOfCommands);
+                                printf("%d\n", structCmd.numberOfCommands);
 
-                                Redirection(structCmd);
+                                if (structCmd.isRedirAppend == true) {
+                                        Redirection(structCmd, APPD);
+                                }
+                                else {
+                                        Redirection(structCmd, TRUNCT);
+                                }
 
                                 printf("\n");
                         }
