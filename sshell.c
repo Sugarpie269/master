@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <errno.h>
+
 
 #define CMDLINE_MAX 512
 #define MAX_ARGS 17
@@ -33,8 +35,13 @@ enum PARSING_ERRORS
         NO_DIRECTORY = -6,
         EXIT_ERROR = -7,
         NO_ERROR = -8,
-        CANNOT_CD_INTO_DIRECTORY = -9,
         COMMAND_NOT_FOUND = -10,
+};
+
+enum LAUNCHING_ERRORS
+{
+        UNKNOWN_COMMAND = 2,
+        CANNOT_CD_INTO_DIRECTORY = -9,
 };
 
 enum DELIMS
@@ -143,14 +150,19 @@ int PrintErr(int enum_error, struct CommandLine structCmd, int status)
                 fprintf(stderr, "Bye...\n");
         }
         else if(enum_error == CANNOT_CD_INTO_DIRECTORY){
-                fprintf(stderr, "Error: can not cd into directory\n");
+                fprintf(stderr, "Error: cannot cd into directory\n");
         }
         else if(enum_error == COMMAND_NOT_FOUND){
                 fprintf(stderr, "Error: command not found\n");
                 fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, 1);
                 return 0;
         }
-        fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, WEXITSTATUS(status));
+        if (status == FAILURE) {
+                fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, 1);
+        }
+        else {
+                fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, WEXITSTATUS(status));
+        }
         return 0;
 }
 
@@ -404,6 +416,7 @@ int main(void)
         char *argPL[MAX_ARGS];
         char *argRD[MAX_ARGS];
         bool exit_bool = false;
+        extern int errno;
 
 
         while ((1) && exit_bool == false)
@@ -507,7 +520,8 @@ int main(void)
                                 {
                                         /* Child Process*/
                                         execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
-                                        exit(COMMAND_NOT_FOUND);
+                                        /*errno == 2 when command not found*/
+                                        exit(errno);
                                 }
                                 else if (pid > 0)
                                 {
@@ -515,15 +529,20 @@ int main(void)
                                         waitpid(pid == P_PID, &status, 0);
 
                                         if (WIFEXITED(status) != 0) {
-                                                if (WEXITSTATUS(status) != 0) {
+                                                if (WEXITSTATUS(status) == UNKNOWN_COMMAND) {
                                                         PrintErr(COMMAND_NOT_FOUND, structCmd, COMMAND_NOT_FOUND);
                                                 }
+                                                else if (WEXITSTATUS(status) != 0) {
+                                                        //Child exited normally, but returns an exit status defined by execvp results
+                                                        PrintErr(NO_ERROR, structCmd, status);
+                                                }
                                                 else {
-                                                        PrintErr(0, structCmd, WEXITSTATUS(status));
+                                                        //Child normal exit and success
+                                                        PrintErr(NO_ERROR, structCmd, status);
                                                 }
                                         }
                                         else {
-                                            perror("TEMP: Child EXECVP error, but command found.");
+                                            perror("TEMP: Child abnormal exit.");
                                         }
                                 }
                                 else
