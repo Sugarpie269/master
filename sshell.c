@@ -41,7 +41,7 @@ enum DELIMS{
         NUMBER_OF_DELIMS = 3,
 };
 
-struct command{
+struct Command{
         char *args[MAX_ARGS];
         int numberOfArguments;
 };
@@ -52,7 +52,7 @@ enum STATUS{
 };
 
 struct CommandLine{
-        struct command array_commands[MAX_ARGS];
+        struct Command array_commands[MAX_ARGS];
         char cmd[CMDLINE_MAX];
         bool isRedirect;
         bool isPipe;
@@ -174,7 +174,41 @@ int Builtin_sls(struct CommandLine structCmd){
                         printf("%s (%lld bytes)\n", dir_entry->d_name, (long long) sb.st_size);
                 }
         }
+        free(dir_entry);
+        free(directory);
         return SUCCESS;
+}
+
+void Pipe(struct Command process1, struct Command process2){
+        int fd[2];    
+        pipe(fd);
+        if (fork() != 0) {  
+                /* Parent */
+                close(fd[0]);
+                dup2(fd[1], STDOUT_FILENO);
+                close(fd[1]);
+                execvp(process1.args[0], &process1.args[0]);    
+        } else {            
+                /* Child */
+                close(fd[1]);
+                dup2(fd[0], STDIN_FILENO);
+                close(fd[0]);
+                execvp(process2.args[0], &process2.args[0]);    
+        }
+}
+
+void Pipeline(struct CommandLine structCmd)
+{
+        printf("Pipeline\n");
+        for(int i=0;i<structCmd.numberOfCommands;i++){
+                if(structCmd.numberOfCommands == 2){
+                        Pipe(structCmd.array_commands[i], structCmd.array_commands[i+1]);
+                        i =  i+1;
+                }else if(structCmd.numberOfCommands == 3){
+                        printf("For 3\n");
+                }
+                printf("do something\n");
+        }
 }
 
 int main(void)
@@ -343,6 +377,7 @@ int main(void)
                                 }
                         }
 
+                        Pipeline(structCmd);
                         printf("%d", structCmd.numberOfCommands);
                         printf("\n");
                 }
