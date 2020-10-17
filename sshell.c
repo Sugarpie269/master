@@ -282,14 +282,10 @@ int Builtin_sls(struct CommandLine structCmd)
 
         while ((dir_entry = readdir(directory)) != NULL)
         {
-                if (dir_entry->d_name[0] != current[0] && dir_entry!= NULL && (dir_entry->d_type == DT_DIR || dir_entry->d_type == DT_REG))
+                if (dir_entry->d_name[0] != current[0] && dir_entry!= NULL)
                 {
-                        char cwd[MAX_PATH];
-                        getcwd(cwd, sizeof(cwd));
                         struct stat sb;
-                        strncat(cwd, "/", sizeof("/"));
-                        strncat(cwd, dir_entry->d_name, sizeof(dir_entry->d_name));
-                        stat(cwd, &sb);
+                        lstat(dir_entry->d_name, &sb);
                         printf("%s (%lld bytes)\n", dir_entry->d_name, (long long)sb.st_size);
                 }
         }
