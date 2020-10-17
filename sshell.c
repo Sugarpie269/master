@@ -282,7 +282,7 @@ int Builtin_sls(struct CommandLine structCmd)
 
         while ((dir_entry = readdir(directory)) != NULL)
         {
-                if (dir_entry->d_name[0] != current[0])
+                if (dir_entry->d_name[0] != current[0] && dir_entry!= NULL && (dir_entry->d_type == DT_DIR || dir_entry->d_type == DT_REG))
                 {
                         char cwd[MAX_PATH];
                         getcwd(cwd, sizeof(cwd));
@@ -331,7 +331,7 @@ void Pipeline(struct CommandLine structCmd)
 {
         int status;
         int pid_1, pid_2;
-        printf("Pipeline, number of commands = %d\n", structCmd.numberOfCommands);
+        //printf("Pipeline, number of commands = %d\n", structCmd.numberOfCommands);
         if (structCmd.numberOfCommands == 2)
         {
                 int pid = fork();
@@ -369,9 +369,7 @@ void Pipeline(struct CommandLine structCmd)
 
         else if (structCmd.numberOfCommands == 3)
         {
-                printf("For 3\n");
                 int pid = fork();
-                printf("pid = %d\n", pid);
                 if (pid > 0)
                 {
                         waitpid(pid == P_PID, &status, 0);
@@ -379,7 +377,6 @@ void Pipeline(struct CommandLine structCmd)
                 }
                 else if (pid == 0)
                 {
-                        printf("Child_0\n");
                         int fd[2];
                         pipe(fd);
                         pid_1 = fork();
@@ -395,7 +392,6 @@ void Pipeline(struct CommandLine structCmd)
                         else if (pid_1 == 0)
                         {
                                 /* Child */
-                                printf("Child_1\n");
                                 int fd2[2];
                                 pipe(fd2);
                                 pid_2 = fork();
@@ -410,7 +406,6 @@ void Pipeline(struct CommandLine structCmd)
                                 }
                                 else if (pid_2 == 0)
                                 {
-                                        printf("Child_2\n");
                                         close(fd[0]);
                                         close(fd[1]);
                                         close(fd2[1]);
@@ -433,7 +428,6 @@ void Pipeline(struct CommandLine structCmd)
                         printf("fork pid error\n");
                 }
         }
-        printf("End : %s\n", __func__);
 }
 
 void BuiltinCommands(struct CommandLine *structCmd)
@@ -446,6 +440,8 @@ void BuiltinCommands(struct CommandLine *structCmd)
                 if (chdir(structCmd->array_commands[0].args[1]) == -1)
                 {
                         PrintErr(CANNOT_CD_INTO_DIRECTORY, *structCmd, FAILURE);
+                }else{
+                        PrintErr(NO_ERROR, *structCmd, SUCCESS);
                 }
                 structCmd->is_builtin = true;
         }

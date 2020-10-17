@@ -1,5 +1,5 @@
-sshell_exec:	sshell.c
-	gcc -g -Wall -Wextra -Werror -o sshell_exec sshell.c
+sshell:	sshell.c
+	gcc -g -Wall -Wextra -Werror -o sshell sshell.c
 
 .PHONY : clean
 clean :
