@@ -210,15 +210,15 @@ void Redirection(const struct CommandLine structCmd, int rd_mode)
         {
                 /* Child Process*/
                 if (rd_mode == TRUNCT) {
-                        fd = open(structCmd.array_commands[1].args[0], O_WRONLY | O_TRUNC, 0644);
+                        fd = open(structCmd.array_commands[1].args[0], O_WRONLY | O_TRUNC | O_CREAT, 0644);
                 }
                 else {
-                        fd = open(structCmd.array_commands[1].args[0], O_WRONLY | O_APPEND, 0644);
+                        fd = open(structCmd.array_commands[1].args[0], O_WRONLY | O_APPEND | O_CREAT, 0644);
                 }
 
                 if (fd == -1)
                 {
-                        perror("Error: cannot open output file");
+                        PrintErr(CANNOT_OPEN_OUTPUT_FILE, structCmd, FAILURE);
                 }
                 else
                 {
@@ -454,24 +454,33 @@ int main(void)
                 memset(argPL, '\0', sizeof(argPL));
                 memset(argRD, '\0', sizeof(argRD));
 
-                /*Get the characters into an array words*/
+                /*Get the cmd without the new line into the structCmd*/
                 cmd_struct[strlen(cmd_struct) - 1] = '\0';
                 strcpy(structCmd.cmd, cmd_struct);
+
+                /*Initialize the bool variables for structCmd*/
                 structCmd.isPipe = false;
                 structCmd.isRedirect = false;
                 structCmd.isRedirAppend = false;
+
+                /*Find what type of cmd do we have*/
                 FindPipeRedir(&structCmd);
+
+                /*if cmd is not empty*/
                 if(structCmd.cmd[0] != '\0'){
 
                         if (structCmd.isPipe == false && structCmd.isRedirect == false)
                         {
                                 structCmd.numberOfCommands = 1;
                                 structCmd.array_commands[0].numberOfArguments = ConvertToWords(cmd, argv, delim_space);
-                                if (structCmd.array_commands[0].numberOfArguments == TOO_MANY_ARGS)
-                                {
-                                        PrintErr(TOO_MANY_ARGS, structCmd, 1);
-                                        break;
+
+                                /*check for number of arguments*/
+                                if(structCmd.numberOfCommands == MAX_ARGS){
+                                        PrintErr(TOO_MANY_ARGS, structCmd, FAILURE);
+                                        continue;
                                 }
+
+                                /*Remove the null characters from the array*/
                                 CopyCharArray(structCmd.array_commands[0].args, argv, structCmd.array_commands[0].numberOfArguments);
 
                                 /* Builtin command */
@@ -527,22 +536,16 @@ int main(void)
                                 {
                                         /* Parent Process*/
                                         waitpid(pid == P_PID, &status, 0);
-
-                                        if (WIFEXITED(status) != 0) {
-                                                if (WEXITSTATUS(status) == UNKNOWN_COMMAND) {
-                                                        PrintErr(COMMAND_NOT_FOUND, structCmd, COMMAND_NOT_FOUND);
-                                                }
-                                                else if (WEXITSTATUS(status) != 0) {
-                                                        //Child exited normally, but returns an exit status defined by execvp results
-                                                        PrintErr(NO_ERROR, structCmd, status);
-                                                }
-                                                else {
-                                                        //Child normal exit and success
-                                                        PrintErr(NO_ERROR, structCmd, status);
-                                                }
+                                        if (WEXITSTATUS(status) == UNKNOWN_COMMAND) {
+                                                 PrintErr(COMMAND_NOT_FOUND, structCmd, COMMAND_NOT_FOUND);
+                                        }
+                                        else if (WEXITSTATUS(status) != 0) {
+                                                //Child exited normally, but returns an exit status defined by execvp results
+                                                PrintErr(NO_ERROR, structCmd, status);
                                         }
                                         else {
-                                            perror("TEMP: Child abnormal exit.");
+                                                //Child normal exit and success
+                                                PrintErr(NO_ERROR, structCmd, status);
                                         }
                                 }
                                 else
@@ -556,7 +559,11 @@ int main(void)
 
                                 structCmd.numberOfCommands = ConvertToWords(cmd_rd_Copy, argRD, delim_redirect);
 
-                                //numberOfCommands Should be = 2
+                                if(structCmd.numberOfCommands == MAX_ARGS){
+                                        PrintErr(TOO_MANY_ARGS, structCmd, FAILURE);
+                                        continue;
+                                }
+
                                 char *redirArgsTrim[structCmd.numberOfCommands];
                                 char *argvCommandsRedirect[MAX_ARGS];
 
@@ -565,12 +572,12 @@ int main(void)
                                 for (int i = 0; i < structCmd.numberOfCommands; i++)
                                 {
                                         structCmd.array_commands[i].numberOfArguments = ConvertToWords(redirArgsTrim[i], argvCommandsRedirect, delim_space);
-                                        printf("number of arguments: %d\n", structCmd.array_commands[i].numberOfArguments);
-                                        CopyCharArray(structCmd.array_commands[i].args, argvCommandsRedirect, structCmd.array_commands[i].numberOfArguments);
-                                        for (int j = 0; j < structCmd.array_commands[i].numberOfArguments; j++)
-                                        {
-                                                printf("{ %s } ", structCmd.array_commands[i].args[j]);
+                                        if(structCmd.array_commands[i].numberOfArguments == MAX_ARGS){
+                                                PrintErr(TOO_MANY_ARGS, structCmd, FAILURE);
+                                                break;
                                         }
+
+                                        CopyCharArray(structCmd.array_commands[i].args, argvCommandsRedirect, structCmd.array_commands[i].numberOfArguments);
                                 }
 
                                 printf("%d\n", structCmd.numberOfCommands);
