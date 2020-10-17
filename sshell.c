@@ -87,6 +87,8 @@ struct CommandLine
         bool isRedirAppend;
         int numberOfCommands;
         bool to_many_args;
+        bool redirBeforeCmd;
+        bool pipeBeforeCmd;
 };
 
 int ConvertToWords(char cmd[], char *argv[], const char delim[])
@@ -169,17 +171,23 @@ void FindPipeRedir(struct CommandLine *structCmd)
 {
         int pipe = 124;
         int redirect = 62;
-        for (int i = 0; i < (int)strlen(structCmd->cmd); i++) {
-                if (structCmd->cmd[i] == pipe) {
-                        structCmd->isPipe = true;
-                }
-                if (structCmd->cmd[i] == redirect) {
-                        if (structCmd->cmd[i + 1] == redirect) {
-                                structCmd->isRedirAppend = true;
-                        }
-                        structCmd->isRedirect = true;
-                }
 
+        for (int i = 0; i < (int)strlen(structCmd->cmd) - 1; i++) {
+                if(structCmd->cmd[0] == redirect){
+                        structCmd->numberOfCommands = true;
+                        break;
+                }else if(structCmd->cmd[0] == pipe){
+                        structCmd->pipeBeforeCmd = true;
+                        break;
+                }
+                else if (structCmd->cmd[i] == pipe) {
+                        structCmd->isPipe = true;
+                }else if (structCmd->cmd[i] == redirect) {
+                                structCmd->isRedirect = true;
+                }else if(structCmd->cmd[i] == redirect && structCmd->cmd[i + 1] == redirect){
+                                structCmd->isRedirAppend = true; 
+                                i++;  
+                }
         }
 }
 
@@ -468,6 +476,11 @@ int main(void)
                 /*Find what type of cmd do we have*/
                 FindPipeRedir(&structCmd);
 
+                if(structCmd.pipeBeforeCmd || structCmd.redirBeforeCmd){
+                        PrintErr(MISSING_COMMAND, structCmd, FAILURE);
+                        continue;
+                }
+
                 /*if cmd is not empty*/
                 if(structCmd.cmd[0] != '\0'){
 
@@ -614,6 +627,7 @@ int main(void)
                                         }
                                         CopyCharArray(structCmd.array_commands[i].args, argvCommandsPipe, structCmd.array_commands[i].numberOfArguments);
                                 }
+
                                 if (structCmd.to_many_args == false && structCmd.isPipe == true) {
                                         Pipeline(structCmd);
                                 }else{
