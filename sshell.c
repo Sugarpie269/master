@@ -248,6 +248,7 @@ void Redirection(const struct CommandLine structCmd, int rd_mode)
                 if (fd == -1)
                 {
                         PrintErr(CANNOT_OPEN_OUTPUT_FILE, structCmd, FAILURE);
+                        exit(1);
                 }
                 else
                 {
