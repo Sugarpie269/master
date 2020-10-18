@@ -39,7 +39,7 @@ enum PARSING_ERRORS
 
 enum LAUNCHING_ERRORS
 {
-        UNKNOWN_COMMAND = 2,
+        ERROR_EXECVP = 255,
         CANNOT_CD_INTO_DIRECTORY = -9,
 };
 
@@ -200,13 +200,11 @@ void FindPipeRedir(struct CommandLine *structCmd)
                 }
                 else if (structCmd->cmd[i] == redirect && structCmd->cmd[i + 1] == redirect)
                 {
-                        printf("Redirect append\n");
                         structCmd->isRedirAppend = true;
                         i++;
                 }
                 else if (structCmd->cmd[i] == redirect)
                 {
-                        printf("Redirect\n");
                         structCmd->isRedirect = true;
                 }
         }
@@ -487,7 +485,7 @@ int main(void)
         char *argRD[MAX_ARGS];
         bool exit_bool = false;
         extern int errno;
-
+        int res = 0;
         while ((1) && exit_bool == false)
         {
                 int status;
@@ -576,25 +574,23 @@ int main(void)
                                 if (pid == 0)
                                 {
                                         /* Child Process*/
-                                        execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
-
-                                        /*errno == 2 when command not found*/
-                                        exit(errno);
+                                        res = execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
+                                        if (res == -1)
+                                        {
+                                                PrintErr(COMMAND_NOT_FOUND, structCmd, status);
+                                        }
+                                        exit(res);
                                 }
                                 else if (pid > 0)
                                 {
                                         /* Parent Process*/
                                         waitpid(pid == P_PID, &status, 0);
-                                        if (WEXITSTATUS(status) == UNKNOWN_COMMAND)
-                                        {
-                                                PrintErr(COMMAND_NOT_FOUND, structCmd, COMMAND_NOT_FOUND);
-                                        }
-                                        else if (WEXITSTATUS(status) != 0)
+                                        if (WEXITSTATUS(status) != 0 && WEXITSTATUS(status) != ERROR_EXECVP)
                                         {
                                                 /*Child exited normally, but returns an exit status defined by execvp results*/
                                                 PrintErr(NO_ERROR, structCmd, status);
                                         }
-                                        else
+                                        else if(WEXITSTATUS(status) == 0 && WEXITSTATUS(status) != ERROR_EXECVP)
                                         {
                                                 /*Child normal exit and success*/
                                                 PrintErr(NO_ERROR, structCmd, status);
