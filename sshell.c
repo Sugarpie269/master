@@ -13,7 +13,6 @@
 #define CMDLINE_MAX 512
 #define MAX_ARGS 17
 #define MAX_PIPE_LINE 3
-#define MAX_PATH 32
 
 #define EXIT "exit"
 #define CD "cd"
@@ -183,7 +182,7 @@ void FindPipeRedir(struct CommandLine *structCmd)
         int pipe = 124;
         int redirect = 62;
 
-        for (int i = 0; i < (int)strlen(structCmd->cmd) - 1; i++)
+        for (int i = 0; i < (int)strlen(structCmd->cmd); i++)
         {
                 if (structCmd->cmd[0] == redirect)
                 {
@@ -201,12 +200,14 @@ void FindPipeRedir(struct CommandLine *structCmd)
                 }
                 else if (structCmd->cmd[i] == redirect && structCmd->cmd[i + 1] == redirect)
                 {
+                        printf("Redirect append\n");
                         structCmd->isRedirAppend = true;
+                        i++;
                 }
                 else if (structCmd->cmd[i] == redirect)
                 {
+                        printf("Redirect\n");
                         structCmd->isRedirect = true;
-                        i++;
                 }
         }
 }
@@ -259,8 +260,8 @@ void Redirection(const struct CommandLine structCmd, int rd_mode)
         else if (pid > 0)
         {
                 /* Parent Process*/
-                waitpid(pid == P_PID, &status, 0);
-                PrintErr(0, structCmd, status);
+                waitpid(pid == P_PID, &status, SUCCESS);
+                PrintErr(SUCCESS, structCmd, status);
         }
         else
         {
@@ -348,7 +349,6 @@ void Pipeline(struct CommandLine structCmd)
                                 close(fd[0]);
                                 dup2(fd[1], STDOUT_FILENO);
                                 close(fd[1]);
-                                //printf("%s\n", structCmd.array_commands[0]);
                                 execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
                         }
                         else
@@ -357,7 +357,6 @@ void Pipeline(struct CommandLine structCmd)
                                 close(fd[1]);
                                 dup2(fd[0], STDIN_FILENO);
                                 close(fd[0]);
-                                //printf("%s\n", structCmd.array_commands[1].args[0]);
                                 execvp(structCmd.array_commands[1].args[0], &structCmd.array_commands[1].args[0]);
                         }
                 }
@@ -428,10 +427,10 @@ void Pipeline(struct CommandLine structCmd)
 
 void BuiltinCommands(struct CommandLine *structCmd)
 {
-        char cwd[MAX_PATH];
         /*cd*/
         if (!strcmp(structCmd->array_commands[0].args[0], CD))
         {
+                char cwd[CMDLINE_MAX];
                 getcwd(cwd, sizeof(cwd));
                 if (chdir(structCmd->array_commands[0].args[1]) == -1)
                 {
@@ -445,6 +444,7 @@ void BuiltinCommands(struct CommandLine *structCmd)
         /*pwd*/
         if (!strcmp(structCmd->array_commands[0].args[0], PWD))
         {
+                char cwd[CMDLINE_MAX];
                 getcwd(cwd, sizeof(cwd));
                 printf("%s\n", cwd);
                 PrintErr(NO_ERROR, *structCmd, SUCCESS);
@@ -542,13 +542,13 @@ int main(void)
                 if (structCmd.cmd[0] != '\0')
                 {
 
-                        if (structCmd.isPipe == false && structCmd.isRedirect == false)
+                        if (structCmd.isPipe == false && structCmd.isRedirect == false && structCmd.isRedirAppend == false)
                         {
                                 structCmd.numberOfCommands = 1;
                                 structCmd.array_commands[0].numberOfArguments = ConvertToWords(cmd, argv, delim_space);
 
                                 /*check for number of arguments*/
-                                if (structCmd.numberOfCommands == MAX_ARGS)
+                                if (structCmd.array_commands[0].numberOfArguments >= MAX_ARGS)
                                 {
                                         PrintErr(TOO_MANY_ARGS, structCmd, FAILURE);
                                         continue;
@@ -590,12 +590,12 @@ int main(void)
                                         }
                                         else if (WEXITSTATUS(status) != 0)
                                         {
-                                                //Child exited normally, but returns an exit status defined by execvp results
+                                                /*Child exited normally, but returns an exit status defined by execvp results*/
                                                 PrintErr(NO_ERROR, structCmd, status);
                                         }
                                         else
                                         {
-                                                //Child normal exit and success
+                                                /*Child normal exit and success*/
                                                 PrintErr(NO_ERROR, structCmd, status);
                                         }
                                 }
@@ -607,13 +607,17 @@ int main(void)
                         }
                         else if (structCmd.isPipe == false && (structCmd.isRedirect == true || structCmd.isRedirAppend == true))
                         {
+                                /*Redirection and Appending*/
 
                                 structCmd.numberOfCommands = ConvertToWords(cmd_rd_Copy, argRD, delim_redirect);
 
-                                if (structCmd.numberOfCommands == MAX_ARGS)
+                                if (structCmd.numberOfCommands >= MAX_ARGS)
                                 {
                                         structCmd.to_many_args = true;
                                         PrintErr(TOO_MANY_ARGS, structCmd, FAILURE);
+                                        continue;
+                                }else if(structCmd.numberOfCommands != 2){
+                                        PrintErr(NO_OUTPUT_FILE, structCmd, FAILURE);
                                         continue;
                                 }
 
@@ -625,7 +629,7 @@ int main(void)
                                 for (int i = 0; i < structCmd.numberOfCommands; i++)
                                 {
                                         structCmd.array_commands[i].numberOfArguments = ConvertToWords(redirArgsTrim[i], argvCommandsRedirect, delim_space);
-                                        if (structCmd.array_commands[i].numberOfArguments == MAX_ARGS)
+                                        if (structCmd.array_commands[i].numberOfArguments >= MAX_ARGS)
                                         {
                                                 structCmd.to_many_args = true;
                                                 break;
@@ -648,10 +652,11 @@ int main(void)
                                         continue;
                                 }
                         }
-                        else if (structCmd.isPipe == true && structCmd.isRedirect == false)
+                        else if (structCmd.isPipe == true && structCmd.isRedirect == false && structCmd.isRedirAppend == false)
                         {
 
-                                //Implementation of piping
+                                /*Piping*/
+
                                 structCmd.numberOfCommands = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe);
 
                                 char *pipeArgsTrim[structCmd.numberOfCommands];
@@ -662,7 +667,7 @@ int main(void)
                                 for (int i = 0; i < structCmd.numberOfCommands; i++)
                                 {
                                         structCmd.array_commands[i].numberOfArguments = ConvertToWords(pipeArgsTrim[i], argvCommandsPipe, delim_space);
-                                        if (structCmd.array_commands[i].numberOfArguments == MAX_ARGS)
+                                        if (structCmd.array_commands[i].numberOfArguments >= MAX_ARGS)
                                         {
                                                 structCmd.to_many_args = true;
                                                 break;
