@@ -320,11 +320,6 @@ void Pipeline(struct CommandLine structCmd)
                                 //fprintf(stderr, "Clause 1.\n ");
                                 //On the first cmd chunk, don't need stdin
                                 dup2(pipeArray[i][WRITE], STDOUT_FILENO);
-
-                                for (int j = 0; j < structCmd.numberOfCommands - 1; j++) {
-                                        close(pipeArray[j][READ]);
-                                        close(pipeArray[j][WRITE]);
-                                }
                         }
                         else if (i > 0 && i != structCmd.numberOfCommands - 1)
                         {
@@ -332,22 +327,19 @@ void Pipeline(struct CommandLine structCmd)
                                 //On the inside of pipeline, need the things writtine in STDOUT to be read into STDIN
                                 dup2(pipeArray[i - 1][READ], STDIN_FILENO);
                                 dup2(pipeArray[i][WRITE], STDOUT_FILENO);
-                                for (int j = 0; j < structCmd.numberOfCommands - 1; j++) {
-                                        close(pipeArray[j][READ]);
-                                        close(pipeArray[j][WRITE]);
-                                }
                         }
                         else if (i == structCmd.numberOfCommands - 1) {
                                 //fprintf(stderr, "Clause 3.\n ");
                                 //On the last chunk, don't need to pipe stdout
                                 dup2(pipeArray[i - 1][READ], STDIN_FILENO);
-                                for (int j = 0; j < structCmd.numberOfCommands - 1; j++) {
-                                        close(pipeArray[j][READ]);
-                                        close(pipeArray[j][WRITE]);
-                                }
                         }
                         else {
                                 fprintf(stderr, "EM: [i] is negative. ");
+                        }
+
+                        for (int j = 0; j < structCmd.numberOfCommands - 1; j++) { //closing pipes in child
+                            close(pipeArray[j][READ]);
+                            close(pipeArray[j][WRITE]);
                         }
 
                         //fprintf(stderr, "EM: Done with dup2 and closing, now exec.\n");
