@@ -296,131 +296,90 @@ int Builtin_sls(struct CommandLine structCmd)
         return SUCCESS;
 }
 
-void Pipe(struct Command process1, struct Command process2)
-{
-        int fd[2];
-        pipe(fd);
-        printf("Begin: %s", __func__);
-
-        if (fork() != 0)
-        {
-                /* Parent */
-                close(fd[0]);
-                dup2(fd[1], STDOUT_FILENO);
-                close(fd[1]);
-                printf("%s\n", process1.args[0]);
-                execvp(process1.args[0], &process1.args[0]);
-        }
-        else
-        {
-                /* Child */
-                close(fd[1]);
-                dup2(fd[0], STDIN_FILENO);
-                close(fd[0]);
-                printf("%s\n", process2.args[1]);
-                execvp(process2.args[0], &process2.args[0]);
-        }
-        printf("End: %s", __func__);
-}
-
 void Pipeline(struct CommandLine structCmd)
 {
         int status;
-        int pid_1, pid_2;
-        //printf("Pipeline, number of commands = %d\n", structCmd.numberOfCommands);
-        if (structCmd.numberOfCommands == 2)
-        {
-                int pid = fork();
-                printf("pid = %d\n", pid);
-                if (pid != 0)
+        pid_t pid;
+        //printf("%d\n", structCmd.numberOfCommands);
+
+        int pipeArray[structCmd.numberOfCommands - 1][2];
+        for (int i = 0; i < structCmd.numberOfCommands - 1; i++) {
+                pipe(pipeArray[i]);
+        }
+        //printf("Size of pipe Array: %ld\n", sizeof(pipeArray));
+
+        for (int i = 0; i < structCmd.numberOfCommands; i++) {
+
+                pid = fork();
+                //printf("pid = %d\n", pid);
+
+                if (pid == 0)
                 {
-                        waitpid(pid == P_PID, &status, 0);
-                        PrintErr(0, structCmd, status);
+                        //fprintf(stderr, "EM: entered child proc.\n");
+                        if (i == 0) {
+                                //fprintf(stderr, "Clause 1.\n ");
+                                //On the first cmd chunk, don't need stdin
+                                dup2(pipeArray[i][WRITE], STDOUT_FILENO);
+
+                                for (int j = 0; j < structCmd.numberOfCommands - 1; j++) {
+                                        close(pipeArray[j][READ]);
+                                        close(pipeArray[j][WRITE]);
+                                }
+                        }
+                        else if (i > 0 && i != structCmd.numberOfCommands - 1)
+                        {
+                                //fprintf(stderr, "Clause 2.\n ");
+                                //On the inside of pipeline, need the things writtine in STDOUT to be read into STDIN
+                                dup2(pipeArray[i - 1][READ], STDIN_FILENO);
+                                dup2(pipeArray[i][WRITE], STDOUT_FILENO);
+                                for (int j = 0; j < structCmd.numberOfCommands - 1; j++) {
+                                        close(pipeArray[j][READ]);
+                                        close(pipeArray[j][WRITE]);
+                                }
+                        }
+                        else if (i == structCmd.numberOfCommands - 1) {
+                                //fprintf(stderr, "Clause 3.\n ");
+                                //On the last chunk, don't need to pipe stdout
+                                dup2(pipeArray[i - 1][READ], STDIN_FILENO);
+                                for (int j = 0; j < structCmd.numberOfCommands - 1; j++) {
+                                        close(pipeArray[j][READ]);
+                                        close(pipeArray[j][WRITE]);
+                                }
+                        }
+                        else {
+                                fprintf(stderr, "EM: [i] is negative. ");
+                        }
+
+                        //fprintf(stderr, "EM: Done with dup2 and closing, now exec.\n");
+                        if (execvp(structCmd.array_commands[i].args[0], &structCmd.array_commands[i].args[0]) == -1) {
+                                perror("TODO: execvp error in piping child:");
+                        }
                 }
+
+                else if (pid < 0)
+                {
+                        printf("TODO: Fork error\n");
+                }
+                /*
                 else
                 {
-                        printf("Child\n");
-                        int fd[2];
-                        pipe(fd);
-                        if (fork() != 0)
-                        {
-                                /* Parent */
-                                close(fd[0]);
-                                dup2(fd[1], STDOUT_FILENO);
-                                close(fd[1]);
-                                execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
-                        }
-                        else
-                        {
-                                /* Child */
-                                close(fd[1]);
-                                dup2(fd[0], STDIN_FILENO);
-                                close(fd[0]);
-                                execvp(structCmd.array_commands[1].args[0], &structCmd.array_commands[1].args[0]);
-                        }
-                }
+                        fprintf(stderr, "EM: entered parent proc.\n");
+                        //Might be useless area
+                }*/
         }
 
-        else if (structCmd.numberOfCommands == 3)
-        {
-                int pid = fork();
-                if (pid > 0)
-                {
-                        waitpid(pid == P_PID, &status, 0);
-                        PrintErr(0, structCmd, status);
-                }
-                else if (pid == 0)
-                {
-                        int fd[2];
-                        pipe(fd);
-                        pid_1 = fork();
-                        if (pid_1 > 0)
-                        {
-                                /* Parent */
-                                close(fd[0]);
-                                dup2(fd[1], STDOUT_FILENO);
-                                close(fd[1]);
-                                //printf("%s\n", structCmd.array_commands[0]);
-                                execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
-                        }
-                        else if (pid_1 == 0)
-                        {
-                                /* Child */
-                                int fd2[2];
-                                pipe(fd2);
-                                pid_2 = fork();
-                                if (pid_2 > 0)
-                                {
-                                        close(fd[1]);
-                                        dup2(fd[0], STDIN_FILENO);
-                                        dup2(fd2[1], STDOUT_FILENO);
-                                        close(fd[0]);
-                                        close(fd2[1]);
-                                        execvp(structCmd.array_commands[1].args[0], &structCmd.array_commands[1].args[0]);
-                                }
-                                else if (pid_2 == 0)
-                                {
-                                        close(fd[0]);
-                                        close(fd[1]);
-                                        close(fd2[1]);
-                                        dup2(fd2[0], STDIN_FILENO);
-                                        close(fd2[0]);
-                                        execvp(structCmd.array_commands[2].args[0], &structCmd.array_commands[2].args[0]);
-                                }
-                                else
-                                {
-                                        printf("Fork pid_2 error\n");
-                                }
-                        }
-                        else
-                        {
-                                printf("fork pid_1 error\n");
-                        }
-                }
-                else
-                {
-                        printf("fork pid error\n");
-                }
+        //fprintf(stderr, "EM: Finished pipeline. \n");
+
+        for (int j = 0; j < structCmd.numberOfCommands - 1; j++) { // closing previous pipes in parent
+                close(pipeArray[j][0]);
+                close(pipeArray[j][1]);
+        }
+
+        //fprintf(stderr, "EM: Finished Children?\n");
+
+        int corpse;
+        while ((corpse = waitpid(0, &status, 0)) > 0) {
+                printf("PID %d status 0x%.4X\n", corpse, status);
         }
 }
 
