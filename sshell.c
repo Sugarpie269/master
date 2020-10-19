@@ -45,9 +45,9 @@ enum LAUNCHING_ERRORS
 
 enum DELIMS
 {
-        SPACE = 0,
-        PIPE = 1,
-        REDIRECT = 2,
+        SPACE = 32,
+        PIPE = 124,
+        REDIRECT = 62,
         NUMBER_OF_DELIMS = 3,
 };
 
@@ -80,16 +80,32 @@ struct CommandLine
 {
         struct Command array_commands[MAX_ARGS];
         char cmd[CMDLINE_MAX];
+        
         bool isRedirect;
         bool isPipe;
         bool isRedirAppend;
-        int numberOfCommands;
-        bool to_many_args;
-        bool redirBeforeCmd;
-        bool pipeBeforeCmd;
+        bool isPipeBeforeCmd;
+        bool isPipeBeforeRedirect;
+        bool isRedirectBeforePipe;
+        bool isRedirBeforeCmd;
         bool is_builtin;
+        bool to_many_args;
+        
+
+        int numberOfCommands;
+        int pipe_index;
+        int redirect_index;
+        int redirect_append_index;
 };
 
+bool CheckIfAllSpace(char *argv){
+        for(int i=0;i<(int)strlen(argv);i++){
+                if(argv[i] != SPACE){
+                        return false;
+                }
+        }
+        return true;
+}
 int ConvertToWords(char cmd[], char *argv[], const char delim[])
 {
         int i = 0;
@@ -101,9 +117,14 @@ int ConvertToWords(char cmd[], char *argv[], const char delim[])
                 {
                         return TOO_MANY_ARGS;
                 }
-                argv[i] = token;
+
+                if(CheckIfAllSpace(token) == false){
+                        argv[i] = token;
+                        //printf("ARGV[%d] = %s|\n", i, argv[i]);
+                        i++;       
+                }
+                   
                 token = strtok(NULL, delim);
-                i++;
         }
         if (i == 1 && delim[0] != delim_space[0])
         {
@@ -177,36 +198,46 @@ int PrintErr(int enum_error, struct CommandLine structCmd, int status)
         return 0;
 }
 
-void FindPipeRedir(struct CommandLine *structCmd)
-{
-        int pipe = 124;
-        int redirect = 62;
-
-        for (int i = 0; i < (int)strlen(structCmd->cmd); i++)
+void FindPipeRedir(struct CommandLine *structCmd){
+        int lastCharIndex = -1;
+        for (int i = 0; i < (int) strlen(structCmd->cmd); i++)
         {
-                if (structCmd->cmd[0] == redirect)
+                if (lastCharIndex == -1 && structCmd->cmd[i]== REDIRECT)
                 {
-                        structCmd->numberOfCommands = true;
+                        structCmd->isRedirBeforeCmd = true;
                         break;
                 }
-                else if (structCmd->cmd[0] == pipe)
+                else if (lastCharIndex == -1 && structCmd->cmd[i] == PIPE)
                 {
-                        structCmd->pipeBeforeCmd = true;
+                        structCmd->isPipeBeforeCmd = true;
                         break;
                 }
-                else if (structCmd->cmd[i] == pipe)
+                else if (structCmd->cmd[i] == PIPE)
                 {
                         structCmd->isPipe = true;
+                        structCmd->pipe_index = i;
                 }
-                else if (structCmd->cmd[i] == redirect && structCmd->cmd[i + 1] == redirect)
+                else if (structCmd->cmd[lastCharIndex] == REDIRECT && structCmd->cmd[i] == REDIRECT)
                 {
                         structCmd->isRedirAppend = true;
-                        i++;
+                        structCmd->isRedirect = false;
+                        structCmd->redirect_append_index = i;
                 }
-                else if (structCmd->cmd[i] == redirect)
+                else if (structCmd->cmd[i] == REDIRECT)
                 {
                         structCmd->isRedirect = true;
+                        structCmd->redirect_index = i;
                 }
+
+                if(structCmd->cmd[i] != SPACE){
+                        lastCharIndex = i;
+                }
+        }
+
+        if(structCmd->isPipe == true && structCmd->isRedirect == true && (structCmd->pipe_index < structCmd->redirect_index)){
+                structCmd->isPipeBeforeRedirect = true;
+        }else if(structCmd->isPipe == true && structCmd->isRedirect == true && (structCmd->pipe_index > structCmd->redirect_index)){
+                structCmd->isRedirectBeforePipe = true;
         }
 }
 
@@ -465,11 +496,17 @@ void BuiltinCommands(struct CommandLine *structCmd)
 void Init_struct_cmd(struct CommandLine *structCmd){
         structCmd->is_builtin = false;
         structCmd->isPipe = false;
-        structCmd->pipeBeforeCmd = false;
-        structCmd->redirBeforeCmd = false;
+        structCmd->isPipeBeforeCmd = false;
+        structCmd->isRedirBeforeCmd = false;
         structCmd->to_many_args = false;
         structCmd->isRedirAppend = false;
         structCmd->isRedirect = false;
+        structCmd->isPipeBeforeRedirect = false;
+        structCmd->isRedirectBeforePipe = false;
+
+        structCmd->pipe_index = 0;
+        structCmd->redirect_index = 0;
+        structCmd->redirect_append_index = 0;
 }
 
 
@@ -531,9 +568,12 @@ int main(void)
                 /*Find what type of cmd do we have*/
                 FindPipeRedir(&structCmd);
 
-                if (structCmd.pipeBeforeCmd || structCmd.redirBeforeCmd)
+                if (structCmd.isPipeBeforeCmd || structCmd.isRedirBeforeCmd)
                 {
                         PrintErr(MISSING_COMMAND, structCmd, FAILURE);
+                        continue;
+                }else if(structCmd.isRedirectBeforePipe){
+                        PrintErr(MISCLOCATED_OUTPUT_REDIRECTION, structCmd, FAILURE);
                         continue;
                 }
 
@@ -541,7 +581,7 @@ int main(void)
                 if (structCmd.cmd[0] != '\0')
                 {
 
-                        if (structCmd.isPipe == false && structCmd.isRedirect == false && structCmd.isRedirAppend == false)
+                        if (!structCmd.isPipe && !structCmd.isRedirect && !structCmd.isRedirAppend)
                         {
                                 structCmd.numberOfCommands = 1;
                                 structCmd.array_commands[0].numberOfArguments = ConvertToWords(cmd, argv, delim_space);
@@ -602,7 +642,7 @@ int main(void)
                                         exit(1);
                                 }
                         }
-                        else if (structCmd.isPipe == false && (structCmd.isRedirect == true || structCmd.isRedirAppend == true))
+                        else if (!structCmd.isPipe && (structCmd.isRedirect || structCmd.isRedirAppend))
                         {
                                 /*Redirection and Appending*/
 
@@ -649,7 +689,7 @@ int main(void)
                                         continue;
                                 }
                         }
-                        else if (structCmd.isPipe == true && structCmd.isRedirect == false && structCmd.isRedirAppend == false)
+                        else if (structCmd.isPipe && !structCmd.isRedirect && !structCmd.isRedirAppend)
                         {
 
                                 /*Piping*/
@@ -682,7 +722,7 @@ int main(void)
                                         continue;
                                 }
                         }
-                        else
+                        else if(structCmd.isPipeBeforeRedirect)
                         {
                                 //If both:
                                 //After checking only 1 redir and less than 3 pipes
