@@ -89,7 +89,9 @@ struct CommandLine
         bool isRedirAppend;
         bool isPipeBeforeCmd;
         bool isPipeBeforeRedirect;
+        bool isPipeBeforeAppend;
         bool isRedirectBeforePipe;
+        bool isAppendBeforePipe;
         bool isRedirBeforeCmd;
         bool is_builtin;
         bool to_many_args;
@@ -228,7 +230,7 @@ void FindPipeRedir(struct CommandLine *structCmd)
                 {
                         structCmd->isRedirAppend = true;
                         structCmd->isRedirect = false;
-                        structCmd->redirect_append_index = i;
+                        structCmd->redirect_append_index = lastCharIndex;
                 }
                 else if (structCmd->cmd[i] == REDIRECT)
                 {
@@ -242,13 +244,17 @@ void FindPipeRedir(struct CommandLine *structCmd)
                 }
         }
 
-        if (structCmd->isPipe == true && structCmd->isRedirect == true && ((structCmd->pipe_index < structCmd->redirect_index) || (structCmd->pipe_index < structCmd->redirect_append_index)))
+        if (structCmd->isPipe == true && structCmd->isRedirect == true && (structCmd->pipe_index < structCmd->redirect_index))
         {
                 structCmd->isPipeBeforeRedirect = true;
+        }else if(structCmd->isPipe == true && structCmd->isRedirAppend == true &&  (structCmd->pipe_index < structCmd->redirect_append_index)){
+                structCmd->isPipeBeforeAppend = true;
         }
-        else if (structCmd->isPipe == true && structCmd->isRedirect == true && ((structCmd->pipe_index > structCmd->redirect_index) || (structCmd->pipe_index > structCmd->redirect_append_index)))
+        else if (structCmd->isPipe == true && structCmd->isRedirect == true && (structCmd->pipe_index > structCmd->redirect_index))
         {
                 structCmd->isRedirectBeforePipe = true;
+        }else if(structCmd->isPipe == true && structCmd->isRedirAppend == true &&  (structCmd->pipe_index > structCmd->redirect_append_index)){
+                structCmd->isAppendBeforePipe = false;
         }
 }
 
@@ -419,7 +425,11 @@ void PipeAndRedirection(struct CommandLine structCmd)
 
         if (pid == 0)
         {
-                fd = open(structCmd.array_commands[structCmd.numberOfCommands - 1].args[0], O_WRONLY | O_TRUNC | O_CREAT, 0644);
+                if(structCmd.isPipeBeforeRedirect){
+                        fd = open(structCmd.array_commands[structCmd.numberOfCommands - 1].args[0], O_WRONLY | O_TRUNC | O_CREAT, 0644);
+                }else if(structCmd.isPipeBeforeAppend){
+                        fd = open(structCmd.array_commands[structCmd.numberOfCommands - 1].args[0], O_WRONLY | O_APPEND| O_CREAT, 0644);
+                }
                 if (fd == -1)
                 {
                         PrintErr(CANNOT_OPEN_OUTPUT_FILE, structCmd, FAILURE);
@@ -520,6 +530,8 @@ void Init_struct_cmd(struct CommandLine *structCmd)
         structCmd->isRedirect = false;
         structCmd->isPipeBeforeRedirect = false;
         structCmd->isRedirectBeforePipe = false;
+        structCmd->isPipeBeforeAppend = false;
+        structCmd->isAppendBeforePipe = false;
 
         structCmd->pipe_index = 0;
         structCmd->redirect_index = 0;
@@ -589,7 +601,7 @@ int main(void)
                         PrintErr(MISSING_COMMAND, structCmd, FAILURE);
                         continue;
                 }
-                else if (structCmd.isRedirectBeforePipe)
+                else if (structCmd.isRedirectBeforePipe || structCmd.isAppendBeforePipe)
                 {
                         PrintErr(MISCLOCATED_OUTPUT_REDIRECTION, structCmd, FAILURE);
                         continue;
@@ -744,7 +756,7 @@ int main(void)
                                         continue;
                                 }
                         }
-                        else if (structCmd.isPipeBeforeRedirect)
+                        else if (structCmd.isPipeBeforeRedirect || structCmd.isPipeBeforeAppend)
                         {
 
                                 structCmd.numberOfCommands = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe_and_redirect);
