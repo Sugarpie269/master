@@ -21,7 +21,10 @@
 #define delim_space " "
 #define delim_pipe "|"
 #define delim_redirect ">"
+#define delim_pipe_and_redirect "|>"
 #define current "."
+
+static int statusArray[MAX_ARGS];
 
 enum PARSING_ERRORS
 {
@@ -123,7 +126,7 @@ int ConvertToWords(char cmd[], char *argv[], const char delim[])
                 if (CheckIfAllSpace(token) == false)
                 {
                         argv[i] = token;
-                        //printf("ARGV[%d] = %s|\n", i, argv[i]);
+                        //printf("ARGV[%d] = %s | ", i, argv[i]);
                         i++;
                 }
 
@@ -239,11 +242,11 @@ void FindPipeRedir(struct CommandLine *structCmd)
                 }
         }
 
-        if (structCmd->isPipe == true && structCmd->isRedirect == true && (structCmd->pipe_index < structCmd->redirect_index))
+        if (structCmd->isPipe == true && structCmd->isRedirect == true && ((structCmd->pipe_index < structCmd->redirect_index) || (structCmd->pipe_index < structCmd->redirect_append_index)))
         {
                 structCmd->isPipeBeforeRedirect = true;
         }
-        else if (structCmd->isPipe == true && structCmd->isRedirect == true && (structCmd->pipe_index > structCmd->redirect_index))
+        else if (structCmd->isPipe == true && structCmd->isRedirect == true && ((structCmd->pipe_index > structCmd->redirect_index) || (structCmd->pipe_index > structCmd->redirect_append_index)))
         {
                 structCmd->isRedirectBeforePipe = true;
         }
@@ -308,6 +311,137 @@ void Redirection(const struct CommandLine structCmd, int rd_mode)
         }
 }
 
+void PrintArrayStatus(struct CommandLine structCmd, int sizeOfStatusArray)
+{
+        fprintf(stderr, "+ completed '%s' ", structCmd.cmd);
+
+        for (int i = 0; i < sizeOfStatusArray; i++)
+        {
+                printf("[%d]", WEXITSTATUS(statusArray[i]));
+        }
+        printf("\n");
+}
+
+void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
+{
+        int status;
+        int corpse;
+        int k = 0;
+        pid_t pid;
+
+
+        int pipeArray[numberOfPipeCommands - 1][2];
+        for (int i = 0; i < numberOfPipeCommands - 1; i++)
+        {
+                pipe(pipeArray[i]);
+        }
+
+
+        for (int i = 0; i < numberOfPipeCommands; i++)
+        {
+
+                pid = fork();
+
+
+                if (pid == 0)
+                {
+
+                        if (i == 0)
+                        {
+
+                                //On the first cmd chunk, don't need stdin
+                                dup2(pipeArray[i][WRITE], STDOUT_FILENO);
+                        }
+                        else if (i > 0 && i != numberOfPipeCommands - 1)
+                        {
+
+                                //On the inside of pipeline, need the things writtine in STDOUT to be read into STDIN
+                                dup2(pipeArray[i - 1][READ], STDIN_FILENO);
+                                dup2(pipeArray[i][WRITE], STDOUT_FILENO);
+                        }
+                        else if (i == numberOfPipeCommands - 1)
+                        {
+
+                                //On the last chunk, don't need to pipe stdout
+                                dup2(pipeArray[i - 1][READ], STDIN_FILENO);
+                        }
+                        else
+                        {
+                                fprintf(stderr, "EM: [i] is negative. ");
+                        }
+
+                        for (int j = 0; j < numberOfPipeCommands - 1; j++)
+                        { 
+                                //closing pipes in child
+                                close(pipeArray[j][READ]);
+                                close(pipeArray[j][WRITE]);
+                        }
+
+                        //fprintf(stderr, "EM: Done with dup2 and closing, now exec.\n");
+                        if (execvp(structCmd.array_commands[i].args[0], &structCmd.array_commands[i].args[0]) == -1)
+                        {
+                                perror("TODO: execvp error in piping child:");
+                        }
+                }
+
+                else if (pid < 0)
+                {
+                        printf("TODO: Fork error\n");
+                }
+        }
+
+        // closing previous pipes in parent
+        for (int j = 0; j < numberOfPipeCommands - 1; j++)
+        { 
+                close(pipeArray[j][0]);
+                close(pipeArray[j][1]);
+        }
+
+        while ((corpse = waitpid(0, &status, 0)) > 0)
+        {
+                statusArray[k] = (int)(status);
+                k++;
+        }
+}
+
+void PipeAndRedirection(struct CommandLine structCmd)
+{
+        int fd;
+        int status;
+        pid_t pid;
+        if (structCmd.array_commands != NULL)
+        {
+
+                fflush(stdout);
+        }
+
+        pid = fork();
+
+        if (pid == 0)
+        {
+                fd = open(structCmd.array_commands[structCmd.numberOfCommands - 1].args[0], O_WRONLY | O_TRUNC | O_CREAT, 0644);
+                if (fd == -1)
+                {
+                        PrintErr(CANNOT_OPEN_OUTPUT_FILE, structCmd, FAILURE);
+                        exit(1);
+                }
+                else
+                {
+
+                        dup2(fd, STDOUT_FILENO);
+                        close(fd);
+                        Pipeline(structCmd, structCmd.numberOfCommands - 1);
+                        exit(1);
+                }
+        }
+        else if (pid > 0)
+        {
+                waitpid(pid == P_PID, &status, 0);
+                PrintArrayStatus(structCmd, structCmd.numberOfCommands);
+                //PrintErr(NO_ERROR, structCmd, SUCCESS);
+        }
+}
+
 int Builtin_sls(struct CommandLine structCmd)
 {
         struct dirent *dir_entry;
@@ -333,106 +467,6 @@ int Builtin_sls(struct CommandLine structCmd)
         free(directory);
 
         return SUCCESS;
-}
-
-void Pipeline(struct CommandLine structCmd)
-{
-        int status;
-        int corpse;
-        int k = 0;
-        int statusArray[structCmd.numberOfCommands - 1];
-        pid_t pid;
-        //printf("%d\n", structCmd.numberOfCommands);
-
-        int pipeArray[structCmd.numberOfCommands - 1][2];
-        for (int i = 0; i < structCmd.numberOfCommands - 1; i++)
-        {
-                pipe(pipeArray[i]);
-        }
-        //printf("Size of pipe Array: %ld\n", sizeof(pipeArray));
-
-        for (int i = 0; i < structCmd.numberOfCommands; i++)
-        {
-
-                pid = fork();
-                //printf("pid = %d\n", pid);
-
-                if (pid == 0)
-                {
-                        //fprintf(stderr, "EM: entered child proc.\n");
-                        if (i == 0)
-                        {
-                                //fprintf(stderr, "Clause 1.\n ");
-                                //On the first cmd chunk, don't need stdin
-                                dup2(pipeArray[i][WRITE], STDOUT_FILENO);
-                        }
-                        else if (i > 0 && i != structCmd.numberOfCommands - 1)
-                        {
-                                //fprintf(stderr, "Clause 2.\n ");
-                                //On the inside of pipeline, need the things writtine in STDOUT to be read into STDIN
-                                dup2(pipeArray[i - 1][READ], STDIN_FILENO);
-                                dup2(pipeArray[i][WRITE], STDOUT_FILENO);
-                        }
-                        else if (i == structCmd.numberOfCommands - 1)
-                        {
-                                //fprintf(stderr, "Clause 3.\n ");
-                                //On the last chunk, don't need to pipe stdout
-                                dup2(pipeArray[i - 1][READ], STDIN_FILENO);
-                        }
-                        else
-                        {
-                                fprintf(stderr, "EM: [i] is negative. ");
-                        }
-
-                        for (int j = 0; j < structCmd.numberOfCommands - 1; j++)
-                        { //closing pipes in child
-                                close(pipeArray[j][READ]);
-                                close(pipeArray[j][WRITE]);
-                        }
-
-                        //fprintf(stderr, "EM: Done with dup2 and closing, now exec.\n");
-                        if (execvp(structCmd.array_commands[i].args[0], &structCmd.array_commands[i].args[0]) == -1)
-                        {
-                                perror("TODO: execvp error in piping child:");
-                        }
-                }
-
-                else if (pid < 0)
-                {
-                        printf("TODO: Fork error\n");
-                }
-                /*
-                else
-                {
-                        fprintf(stderr, "EM: entered parent proc.\n");
-                        //Might be useless area
-                }*/
-        }
-
-        //fprintf(stderr, "EM: Finished pipeline. \n");
-
-        for (int j = 0; j < structCmd.numberOfCommands - 1; j++)
-        { // closing previous pipes in parent
-                close(pipeArray[j][0]);
-                close(pipeArray[j][1]);
-        }
-
-        //fprintf(stderr, "EM: Finished Children?\n");
-
-        while ((corpse = waitpid(0, &status, 0)) > 0)
-        {
-                statusArray[k] = (int)(status);
-                k++;
-        }
-
-        fprintf(stderr, "+ completed '%s' ", structCmd.cmd);
-
-        for (int i = 0; i < k; i++)
-        {
-                printf("[%d]", WEXITSTATUS(statusArray[i]));
-        }
-
-        printf("\n");
 }
 
 void BuiltinCommands(struct CommandLine *structCmd)
@@ -701,7 +735,8 @@ int main(void)
 
                                 if (structCmd.to_many_args == false && structCmd.isPipe == true)
                                 {
-                                        Pipeline(structCmd);
+                                        Pipeline(structCmd, structCmd.numberOfCommands);
+                                        PrintArrayStatus(structCmd, structCmd.numberOfCommands);
                                 }
                                 else
                                 {
@@ -711,36 +746,25 @@ int main(void)
                         }
                         else if (structCmd.isPipeBeforeRedirect)
                         {
-                                //If both:
-                                //After checking only 1 redir and less than 3 pipes
-                                int sizeOfPipe = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe);
-                                int sizeOfRedir = ConvertToWords(cmd_rd_Copy, argRD, delim_redirect);
-                                char *pipeArgsTrim[sizeOfPipe];
-                                char *redirArgsTrim[sizeOfRedir]; //Should be size = 2
 
-                                CopyCharArray(pipeArgsTrim, argPL, sizeOfPipe);
-                                CopyCharArray(redirArgsTrim, argRD, sizeOfRedir);
+                                structCmd.numberOfCommands = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe_and_redirect);
 
-                                for (int i = 0; i < sizeOfRedir; i++)
+                                char *pipeAndRedirectArgsTrim[structCmd.numberOfCommands];
+                                char *argvCommandsPipe[MAX_ARGS];
+
+                                CopyCharArray(pipeAndRedirectArgsTrim, argPL, structCmd.numberOfCommands);
+
+                                for (int i = 0; i < structCmd.numberOfCommands; i++)
                                 {
-                                        printf("[ %s ] ", redirArgsTrim[i]);
+                                        structCmd.array_commands[i].numberOfArguments = ConvertToWords(pipeAndRedirectArgsTrim[i], argvCommandsPipe, delim_space);
+                                        if (structCmd.array_commands[i].numberOfArguments >= MAX_ARGS)
+                                        {
+                                                structCmd.to_many_args = true;
+                                                break;
+                                        }
+                                        CopyCharArray(structCmd.array_commands[i].args, argvCommandsPipe, structCmd.array_commands[i].numberOfArguments);
                                 }
-                                printf("%ld", sizeof(redirArgsTrim) / sizeof(char));
-                                printf("\n");
-
-                                for (int i = 0; i < sizeOfPipe; i++)
-                                {
-                                        printf("{ %s } ", pipeArgsTrim[i]);
-                                }
-                                printf("%ld", sizeof(pipeArgsTrim) / sizeof(char));
-                                printf("\n");
-
-                                //Conduct piping mechanism up until the last argument (asuming each piping action is correct)
-                                //If any piping actions fail, the following will fail in some way...?
-
-                                //Last element should be something like [action > file]
-                                //Thus, parseRedir->last element, pipe into action and write to file
-                                //If Redir fails, use errors that would raise in redir
+                                PipeAndRedirection(structCmd);
                         }
                 }
         }
