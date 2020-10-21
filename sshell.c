@@ -24,7 +24,7 @@
 #define delim_pipe_and_redirect "|>"
 #define current "."
 
-static int statusArray[MAX_ARGS];
+int statusArray[MAX_ARGS];
 
 enum PARSING_ERRORS
 {
@@ -317,18 +317,18 @@ void Redirection(const struct CommandLine structCmd, int rd_mode)
         }
 }
 
-void PrintArrayStatus(struct CommandLine structCmd, int sizeOfStatusArray)
+void PrintArrayStatus(struct CommandLine structCmd, int sizeOfStatusArray, int statusArray[])
 {
         fprintf(stderr, "+ completed '%s' ", structCmd.cmd);
 
         for (int i = 0; i < sizeOfStatusArray; i++)
         {
-                printf("[%d]", WEXITSTATUS(statusArray[i]));
+                printf("[%d]", statusArray[i]);
         }
         printf("\n");
 }
 
-void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
+void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands, int *statusArray)
 {
         int status;
         int corpse;
@@ -386,7 +386,9 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
                         //fprintf(stderr, "EM: Done with dup2 and closing, now exec.\n");
                         if (execvp(structCmd.array_commands[i].args[0], &structCmd.array_commands[i].args[0]) == -1)
                         {
-                                perror("TODO: execvp error in piping child:");
+                                //perror("TODO: execvp error in piping child:");
+                                fprintf(stderr, "Error: command not found\n");
+                                exit(-1);
                         }
                 }
 
@@ -405,8 +407,13 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
 
         while ((corpse = waitpid(0, &status, 0)) > 0)
         {
-                statusArray[k] = (int)(status);
+                if(WEXITSTATUS(status) == ERROR_EXECVP){
+                        statusArray[k] = FAILURE;
+                }else{
+                        statusArray[k] = (int)WEXITSTATUS(status);
+                }
                 k++;
+                printf("%d, ", statusArray[k]);
         }
 }
 
@@ -414,6 +421,7 @@ void PipeAndRedirection(struct CommandLine structCmd)
 {
         int fd;
         int status;
+        int statusArray[MAX_ARGS];
         pid_t pid;
         if (structCmd.array_commands != NULL)
         {
@@ -440,15 +448,14 @@ void PipeAndRedirection(struct CommandLine structCmd)
 
                         dup2(fd, STDOUT_FILENO);
                         close(fd);
-                        Pipeline(structCmd, structCmd.numberOfCommands - 1);
+                        Pipeline(structCmd, structCmd.numberOfCommands - 1, statusArray);
                         exit(1);
                 }
         }
         else if (pid > 0)
         {
                 waitpid(pid == P_PID, &status, 0);
-                PrintArrayStatus(structCmd, structCmd.numberOfCommands);
-                //PrintErr(NO_ERROR, structCmd, SUCCESS);
+                PrintArrayStatus(structCmd, structCmd.numberOfCommands, statusArray);
         }
 }
 
@@ -554,6 +561,7 @@ int main(void)
         while ((1) && exit_bool == false)
         {
                 int status;
+                int statusArray[MAX_ARGS];
                 pid_t pid;
                 struct CommandLine structCmd;
 
@@ -747,8 +755,8 @@ int main(void)
 
                                 if (structCmd.to_many_args == false && structCmd.isPipe == true)
                                 {
-                                        Pipeline(structCmd, structCmd.numberOfCommands);
-                                        PrintArrayStatus(structCmd, structCmd.numberOfCommands);
+                                        Pipeline(structCmd, structCmd.numberOfCommands, statusArray);
+                                        PrintArrayStatus(structCmd, structCmd.numberOfCommands, statusArray);
                                 }
                                 else
                                 {
