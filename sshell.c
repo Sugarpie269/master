@@ -24,7 +24,7 @@
 #define delim_pipe_and_redirect "|>"
 #define current "."
 
-static int statusArray[MAX_ARGS];
+
 
 enum PARSING_ERRORS
 {
@@ -74,6 +74,13 @@ enum REDIR_MODE
         APPD = 1,
 };
 
+typedef struct Hash{
+        int key;
+        int value;
+}hash;
+
+hash statusArray[MAX_ARGS];
+
 struct Command
 {
         char *args[MAX_ARGS];
@@ -96,6 +103,8 @@ struct CommandLine
         bool isRedirBeforeCmd;
         bool is_builtin;
         bool to_many_args;
+        bool hasEmptyCmd;
+        bool hasEmptyRedir;
 
         int numberOfCommands;
         int pipe_index;
@@ -215,8 +224,38 @@ int PrintErr(int enum_error, struct CommandLine structCmd, int status)
 void FindPipeRedir(struct CommandLine *structCmd)
 {
         int lastCharIndex = -1;
+
+        bool firstPipe = false;
+        bool emptyCmd = true;
+        bool lastRedir = false;
+        bool emptyRedirCmd = true;
+
         for (int i = 0; i < (int)strlen(structCmd->cmd); i++)
         {
+                //Missing command error handling start
+                if (structCmd->cmd[i] == PIPE && firstPipe == false) {
+                    firstPipe = true;
+                }
+                else if ((structCmd->cmd[i] == PIPE || structCmd->cmd[i] == REDIRECT) && firstPipe == true) {
+                    if (emptyCmd == true){
+                        structCmd->hasEmptyCmd = true;
+                    }
+                    else {
+                        emptyCmd = true;
+                    }
+                }
+                if (firstPipe == true && structCmd->cmd[i] != PIPE && structCmd->cmd[i] != REDIRECT && structCmd->cmd[i] != SPACE){
+                        emptyCmd = false;
+                }
+                
+                if (structCmd->cmd[i] == REDIRECT && lastRedir == false) {
+                    lastRedir = true;
+                }
+                else if (lastRedir == true && structCmd->cmd[i] != REDIRECT && structCmd->cmd[i] != SPACE) {
+                    emptyRedirCmd = false;
+                }
+                //Missing command error handling end
+
                 if (lastCharIndex == -1 && structCmd->cmd[i] == REDIRECT)
                 {
                         structCmd->isRedirBeforeCmd = true;
@@ -249,6 +288,15 @@ void FindPipeRedir(struct CommandLine *structCmd)
                         lastCharIndex = i;
                 }
         }
+
+        //missing command error start
+        if (emptyCmd == true && firstPipe == true) {
+            structCmd->hasEmptyCmd = true;
+        }
+        if (emptyRedirCmd == true && lastRedir == true) {
+            structCmd->hasEmptyRedir = true;
+        }
+        //missing command error end
 
         if (structCmd->isPipe == true && structCmd->isRedirect == true && (structCmd->pipe_index < structCmd->redirect_index))
         {
@@ -329,9 +377,15 @@ void PrintArrayStatus(struct CommandLine structCmd, int sizeOfStatusArray)
 
         for (int i = 0; i < sizeOfStatusArray; i++)
         {
-                printf("[%d]", WEXITSTATUS(statusArray[i]));
+                printf("[%d]", WEXITSTATUS(statusArray[i].value));
         }
         printf("\n");
+}
+
+int cmpHash(const void *a, const void *b){
+        hash *status_1 = (hash*)a;
+        hash *status_2 = (hash*)b;
+        return (status_1->key - status_2->key);
 }
 
 void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
@@ -417,9 +471,17 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
 
         while ((corpse = waitpid(0, &status, 0)) > 0)
         {
-                statusArray[k] = (int)(status);
+
+                statusArray[k].key = corpse;
+                statusArray[k].value = status;
                 k++;
         }
+        qsort(statusArray, numberOfPipeCommands, sizeof(hash), cmpHash);
+        fprintf(stderr, "+ completed '%s' ", structCmd.cmd);
+        for(int i=0;i<numberOfPipeCommands;i++){
+                fprintf(stderr, "[%d]", WEXITSTATUS(statusArray[i].value));
+        }
+        fprintf(stderr, "\n");
 }
 
 void PipeAndRedirection(struct CommandLine structCmd)
@@ -459,8 +521,6 @@ void PipeAndRedirection(struct CommandLine structCmd)
         else if (pid > 0)
         {
                 waitpid(pid == P_PID, &status, 0);
-                PrintArrayStatus(structCmd, structCmd.numberOfCommands);
-                //PrintErr(NO_ERROR, structCmd, SUCCESS);
         }
 }
 
@@ -544,6 +604,8 @@ void Init_struct_cmd(struct CommandLine *structCmd)
         structCmd->isRedirectBeforePipe = false;
         structCmd->isPipeBeforeAppend = false;
         structCmd->isAppendBeforePipe = false;
+        structCmd->hasEmptyCmd = false;
+        structCmd->hasEmptyRedir = false;
 
         structCmd->pipe_index = 0;
         structCmd->redirect_index = 0;
@@ -739,6 +801,12 @@ int main(void)
 
                                 /*Piping*/
 
+                                if (structCmd.hasEmptyCmd)
+                                {
+                                    PrintErr(MISSING_COMMAND, structCmd, FAILURE);
+                                    continue;
+                                }
+
                                 structCmd.numberOfCommands = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe);
 
                                 char *pipeArgsTrim[structCmd.numberOfCommands];
@@ -760,7 +828,6 @@ int main(void)
                                 if (structCmd.to_many_args == false && structCmd.isPipe == true)
                                 {
                                         Pipeline(structCmd, structCmd.numberOfCommands);
-                                        PrintArrayStatus(structCmd, structCmd.numberOfCommands);
                                 }
                                 else
                                 {
@@ -770,6 +837,18 @@ int main(void)
                         }
                         else if (structCmd.isPipeBeforeRedirect || structCmd.isPipeBeforeAppend)
                         {
+
+                                if (structCmd.hasEmptyRedir)
+                                {
+                                PrintErr(NO_OUTPUT_FILE, structCmd, FAILURE);
+                                continue;
+                                }
+                                //When no outputfile error occurs, has emptycmd triggers too. So do no_output check first
+                                if (structCmd.hasEmptyCmd)
+                                {
+                                    PrintErr(MISSING_COMMAND, structCmd, FAILURE);
+                                    continue;
+                                }
 
                                 structCmd.numberOfCommands = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe_and_redirect);
 
