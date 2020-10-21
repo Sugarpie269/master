@@ -179,7 +179,7 @@ int PrintErr(int enum_error, struct CommandLine structCmd, int status)
         }
         else if (enum_error == CANNOT_OPEN_OUTPUT_FILE)
         {
-                fprintf(stderr, "Error: can not open output file\n");
+                fprintf(stderr, "Error: cannot open output file\n");
                 return 0;
         }
         else if (enum_error == MISCLOCATED_OUTPUT_REDIRECTION)
