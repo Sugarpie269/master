@@ -569,7 +569,7 @@ int main(void)
                 struct CommandLine structCmd;
 
                 /* Print prompt */
-                printf("sshell$ ");
+                printf("sshell@ucd$ ");
                 fflush(stdout);
 
                 /* Get command line */
