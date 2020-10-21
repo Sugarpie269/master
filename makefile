@@ -3,4 +3,4 @@ sshell:	sshell.c
 
 .PHONY : clean
 clean :
-	-rm sshell_exec 
+	-rm sshell
