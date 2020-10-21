@@ -24,7 +24,7 @@
 #define delim_pipe_and_redirect "|>"
 #define current "."
 
-static int statusArray[MAX_ARGS];
+
 
 enum PARSING_ERRORS
 {
@@ -73,6 +73,13 @@ enum REDIR_MODE
         TRUNCT = 0,
         APPD = 1,
 };
+
+typedef struct Hash{
+        int key;
+        int value;
+}hash;
+
+hash statusArray[MAX_ARGS];
 
 struct Command
 {
@@ -329,9 +336,15 @@ void PrintArrayStatus(struct CommandLine structCmd, int sizeOfStatusArray)
 
         for (int i = 0; i < sizeOfStatusArray; i++)
         {
-                printf("[%d]", WEXITSTATUS(statusArray[i]));
+                printf("[%d]", WEXITSTATUS(statusArray[i].value));
         }
         printf("\n");
+}
+
+int cmpHash(const void *a, const void *b){
+        hash *status_1 = (hash*)a;
+        hash *status_2 = (hash*)b;
+        return (status_1->key - status_2->key);
 }
 
 void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
@@ -417,9 +430,17 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
 
         while ((corpse = waitpid(0, &status, 0)) > 0)
         {
-                statusArray[k] = (int)(status);
+
+                statusArray[k].key = corpse;
+                statusArray[k].value = status;
                 k++;
         }
+        qsort(statusArray, numberOfPipeCommands, sizeof(hash), cmpHash);
+        fprintf(stderr, "+ completed '%s' ", structCmd.cmd);
+        for(int i=0;i<numberOfPipeCommands;i++){
+                fprintf(stderr, "[%d]", WEXITSTATUS(statusArray[i].value));
+        }
+        fprintf(stderr, "\n");
 }
 
 void PipeAndRedirection(struct CommandLine structCmd)
@@ -459,8 +480,6 @@ void PipeAndRedirection(struct CommandLine structCmd)
         else if (pid > 0)
         {
                 waitpid(pid == P_PID, &status, 0);
-                PrintArrayStatus(structCmd, structCmd.numberOfCommands);
-                //PrintErr(NO_ERROR, structCmd, SUCCESS);
         }
 }
 
@@ -760,7 +779,6 @@ int main(void)
                                 if (structCmd.to_many_args == false && structCmd.isPipe == true)
                                 {
                                         Pipeline(structCmd, structCmd.numberOfCommands);
-                                        PrintArrayStatus(structCmd, structCmd.numberOfCommands);
                                 }
                                 else
                                 {
