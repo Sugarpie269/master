@@ -38,6 +38,7 @@ enum PARSING_ERRORS
         NO_ERROR = -8,
         COMMAND_NOT_FOUND = -10,
         NO_REDIR_NO_PIPE = -11,
+        COMMAND_NOT_FOUND_PIPE = -12,
 };
 
 enum LAUNCHING_ERRORS
@@ -194,6 +195,11 @@ int PrintErr(int enum_error, struct CommandLine structCmd, int status)
                 fprintf(stderr, "Error: command not found\n");
                 fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, 1);
                 return 0;
+        }
+        else if (enum_error == COMMAND_NOT_FOUND_PIPE)
+        {
+            fprintf(stderr, "Error: command not found\n");
+            return 0;
         }
         if (status == FAILURE)
         {
@@ -384,15 +390,20 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
                         }
 
                         //fprintf(stderr, "EM: Done with dup2 and closing, now exec.\n");
-                        if (execvp(structCmd.array_commands[i].args[0], &structCmd.array_commands[i].args[0]) == -1)
+                        int res = execvp(structCmd.array_commands[i].args[0], &structCmd.array_commands[i].args[0]);
+
+                        if (res == -1)
                         {
-                                perror("TODO: execvp error in piping child:");
+                            PrintErr(COMMAND_NOT_FOUND_PIPE, structCmd, 0);
                         }
+                        exit(1);
+
                 }
 
                 else if (pid < 0)
                 {
-                        printf("TODO: Fork error\n");
+                        printf("Fork Error. Exiting...\n");
+                        exit(-1);
                 }
         }
 
