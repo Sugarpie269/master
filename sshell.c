@@ -395,8 +395,9 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
                         if (res == -1)
                         {
                             PrintErr(COMMAND_NOT_FOUND_PIPE, structCmd, 0);
+                            res = 1;
                         }
-                        exit(1);
+                        exit(res);
 
                 }
 
