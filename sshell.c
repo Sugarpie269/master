@@ -354,8 +354,13 @@ void Redirection(const struct CommandLine structCmd, int rd_mode)
                 {
                         dup2(fd, STDOUT_FILENO);
                         close(fd);
-                        execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
-                        perror("evecvp error in child");
+                        int res = execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
+                        if (res == -1)
+                        {
+                            PrintErr(COMMAND_NOT_FOUND_PIPE, structCmd, 0);
+                            res = 1;
+                        }
+                        exit(res);
                 }
         }
         else if (pid > 0)
@@ -457,7 +462,7 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
 
                 else if (pid < 0)
                 {
-                        printf("Fork Error. Exiting...\n");
+                        perror("Fork Error. Exiting...\n");
                         exit(-1);
                 }
         }
