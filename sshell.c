@@ -24,8 +24,6 @@
 #define delim_pipe_and_redirect "|>"
 #define current "."
 
-
-
 enum PARSING_ERRORS
 {
         TOO_MANY_ARGS = -1,
@@ -74,10 +72,12 @@ enum REDIR_MODE
         APPD = 1,
 };
 
-typedef struct Hash{
+/*struct for saving the pid and status to sort after executing the pipelines*/
+typedef struct Hash
+{
         int key;
         int value;
-}hash;
+} hash;
 
 hash statusArray[MAX_ARGS];
 
@@ -112,6 +112,7 @@ struct CommandLine
         int redirect_append_index;
 };
 
+/*check if the charcaters in the string are all space or not*/
 bool CheckIfAllSpace(char *argv)
 {
         for (int i = 0; i < (int)strlen(argv); i++)
@@ -123,6 +124,8 @@ bool CheckIfAllSpace(char *argv)
         }
         return true;
 }
+
+/*Splits a character array based on seperatirs/delims provided*/
 int ConvertToWords(char cmd[], char *argv[], const char delim[])
 {
         int i = 0;
@@ -138,7 +141,6 @@ int ConvertToWords(char cmd[], char *argv[], const char delim[])
                 if (CheckIfAllSpace(token) == false)
                 {
                         argv[i] = token;
-                        //printf("ARGV[%d] = %s | ", i, argv[i]);
                         i++;
                 }
 
@@ -151,6 +153,7 @@ int ConvertToWords(char cmd[], char *argv[], const char delim[])
         return i;
 }
 
+/*Copies the non-null values of argv array to a argsWithoutNull array*/
 void CopyCharArray(char *argsWithoutNull[], char *argv[], int sizeOfArgv)
 {
         for (int i = 0; i < sizeOfArgv; i++)
@@ -160,67 +163,59 @@ void CopyCharArray(char *argsWithoutNull[], char *argv[], int sizeOfArgv)
         argsWithoutNull[sizeOfArgv] = NULL;
 }
 
+/*Prints the error defined by enum_error in the correct format*/
 int PrintErr(int enum_error, struct CommandLine structCmd, int status)
 {
-        if (enum_error == TOO_MANY_ARGS)
+        switch (enum_error)
         {
+        case TOO_MANY_ARGS:
                 fprintf(stderr, "Error: too many process arguments\n");
                 return 0;
-        }
-        else if (enum_error == MISSING_COMMAND)
-        {
+        case MISSING_COMMAND:
                 fprintf(stderr, "Error: missing command\n");
                 return 0;
-        }
-        else if (enum_error == NO_OUTPUT_FILE)
-        {
+        case NO_OUTPUT_FILE:
                 fprintf(stderr, "Error: no output file\n");
                 return 0;
-        }
-        else if (enum_error == CANNOT_OPEN_OUTPUT_FILE)
-        {
+        case CANNOT_OPEN_OUTPUT_FILE:
                 fprintf(stderr, "Error: cannot open output file\n");
                 return 0;
-        }
-        else if (enum_error == MISCLOCATED_OUTPUT_REDIRECTION)
-        {
+        case MISCLOCATED_OUTPUT_REDIRECTION:
                 fprintf(stderr, "Error: mislocated output redirection\n");
                 return 0;
-        }
-        else if (enum_error == NO_DIRECTORY)
-        {
-                fprintf(stderr, "Error: No such directory.\n");
-        }
-        else if (enum_error == EXIT_ERROR)
-        {
-                fprintf(stderr, "Bye...\n");
-        }
-        else if (enum_error == CANNOT_CD_INTO_DIRECTORY)
-        {
-                fprintf(stderr, "Error: cannot cd into directory\n");
-        }
-        else if (enum_error == COMMAND_NOT_FOUND)
-        {
+        case COMMAND_NOT_FOUND:
                 fprintf(stderr, "Error: command not found\n");
                 fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, 1);
                 return 0;
+        case COMMAND_NOT_FOUND_PIPE:
+                fprintf(stderr, "Error: command not found\n");
+                return 0;
+
+        case NO_DIRECTORY:
+                fprintf(stderr, "Error: No such directory.\n");
+                break;
+        case EXIT_ERROR:
+                fprintf(stderr, "Bye...\n");
+                break;
+        case CANNOT_CD_INTO_DIRECTORY:
+                fprintf(stderr, "Error: cannot cd into directory\n");
+                break;
         }
-        else if (enum_error == COMMAND_NOT_FOUND_PIPE)
+
+        switch (status)
         {
-            fprintf(stderr, "Error: command not found\n");
-            return 0;
-        }
-        if (status == FAILURE)
-        {
-                fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, 1);
-        }
-        else
-        {
+        case SUCCESS:
+                fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, SUCCESS);
+                break;
+        default:
                 fprintf(stderr, "+ completed '%s' [%d]\n", structCmd.cmd, WEXITSTATUS(status));
+                break;
         }
+
         return 0;
 }
 
+/*Finds whether the command is pipe, redirect, append, both or normal*/
 void FindPipeRedir(struct CommandLine *structCmd)
 {
         int lastCharIndex = -1;
@@ -232,29 +227,36 @@ void FindPipeRedir(struct CommandLine *structCmd)
 
         for (int i = 0; i < (int)strlen(structCmd->cmd); i++)
         {
-                //Missing command error handling start
-                if (structCmd->cmd[i] == PIPE && firstPipe == false) {
-                    firstPipe = true;
+                /*Missing command error handling start*/
+                if (structCmd->cmd[i] == PIPE && firstPipe == false)
+                {
+                        firstPipe = true;
                 }
-                else if ((structCmd->cmd[i] == PIPE || structCmd->cmd[i] == REDIRECT) && firstPipe == true) {
-                    if (emptyCmd == true){
-                        structCmd->hasEmptyCmd = true;
-                    }
-                    else {
-                        emptyCmd = true;
-                    }
+                else if ((structCmd->cmd[i] == PIPE || structCmd->cmd[i] == REDIRECT) && firstPipe == true)
+                {
+                        if (emptyCmd == true)
+                        {
+                                structCmd->hasEmptyCmd = true;
+                        }
+                        else
+                        {
+                                emptyCmd = true;
+                        }
                 }
-                if (firstPipe == true && structCmd->cmd[i] != PIPE && structCmd->cmd[i] != REDIRECT && structCmd->cmd[i] != SPACE){
+                if (firstPipe == true && structCmd->cmd[i] != PIPE && structCmd->cmd[i] != REDIRECT && structCmd->cmd[i] != SPACE)
+                {
                         emptyCmd = false;
                 }
-                
-                if (structCmd->cmd[i] == REDIRECT && lastRedir == false) {
-                    lastRedir = true;
+
+                if (structCmd->cmd[i] == REDIRECT && lastRedir == false)
+                {
+                        lastRedir = true;
                 }
-                else if (lastRedir == true && structCmd->cmd[i] != REDIRECT && structCmd->cmd[i] != SPACE) {
-                    emptyRedirCmd = false;
+                else if (lastRedir == true && structCmd->cmd[i] != REDIRECT && structCmd->cmd[i] != SPACE)
+                {
+                        emptyRedirCmd = false;
                 }
-                //Missing command error handling end
+                /*Missing command error handling end*/
 
                 if (lastCharIndex == -1 && structCmd->cmd[i] == REDIRECT)
                 {
@@ -289,29 +291,37 @@ void FindPipeRedir(struct CommandLine *structCmd)
                 }
         }
 
-        //missing command error start
-        if (emptyCmd == true && firstPipe == true) {
-            structCmd->hasEmptyCmd = true;
+        /*missing command error start*/
+        if (emptyCmd == true && firstPipe == true)
+        {
+                structCmd->hasEmptyCmd = true;
         }
-        if (emptyRedirCmd == true && lastRedir == true) {
-            structCmd->hasEmptyRedir = true;
+        if (emptyRedirCmd == true && lastRedir == true)
+        {
+                structCmd->hasEmptyRedir = true;
         }
-        //missing command error end
+        /*missing command error end*/
 
+        /*Assigning bool variables for the case when there is both pipe and redirent based on their indexies*/
         if (structCmd->isPipe == true && structCmd->isRedirect == true && (structCmd->pipe_index < structCmd->redirect_index))
         {
                 structCmd->isPipeBeforeRedirect = true;
-        }else if(structCmd->isPipe == true && structCmd->isRedirAppend == true &&  (structCmd->pipe_index < structCmd->redirect_append_index)){
+        }
+        else if (structCmd->isPipe == true && structCmd->isRedirAppend == true && (structCmd->pipe_index < structCmd->redirect_append_index))
+        {
                 structCmd->isPipeBeforeAppend = true;
         }
         else if (structCmd->isPipe == true && structCmd->isRedirect == true && (structCmd->pipe_index > structCmd->redirect_index))
         {
                 structCmd->isRedirectBeforePipe = true;
-        }else if(structCmd->isPipe == true && structCmd->isRedirAppend == true &&  (structCmd->pipe_index > structCmd->redirect_append_index)){
+        }
+        else if (structCmd->isPipe == true && structCmd->isRedirAppend == true && (structCmd->pipe_index > structCmd->redirect_append_index))
+        {
                 structCmd->isAppendBeforePipe = false;
         }
 }
 
+/*Removes trailing new line from the char cmd[]*/
 void RemoveTrailingSpace(char cmd[])
 {
         char *nl;
@@ -320,6 +330,7 @@ void RemoveTrailingSpace(char cmd[])
                 *nl = '\0';
 }
 
+/*Implemets redirection and redirection append*/
 void Redirection(const struct CommandLine structCmd, int rd_mode)
 {
         int status;
@@ -357,8 +368,8 @@ void Redirection(const struct CommandLine structCmd, int rd_mode)
                         int res = execvp(structCmd.array_commands[0].args[0], &structCmd.array_commands[0].args[0]);
                         if (res == -1)
                         {
-                            PrintErr(COMMAND_NOT_FOUND_PIPE, structCmd, 0);
-                            res = 1;
+                                PrintErr(COMMAND_NOT_FOUND_PIPE, structCmd, 0);
+                                res = 1;
                         }
                         exit(res);
                 }
@@ -376,23 +387,15 @@ void Redirection(const struct CommandLine structCmd, int rd_mode)
         }
 }
 
-void PrintArrayStatus(struct CommandLine structCmd, int sizeOfStatusArray)
+/*Comapare function for sorting the hash table of PID and status*/
+int cmpHash(const void *a, const void *b)
 {
-        fprintf(stderr, "+ completed '%s' ", structCmd.cmd);
-
-        for (int i = 0; i < sizeOfStatusArray; i++)
-        {
-                printf("[%d]", WEXITSTATUS(statusArray[i].value));
-        }
-        printf("\n");
-}
-
-int cmpHash(const void *a, const void *b){
-        hash *status_1 = (hash*)a;
-        hash *status_2 = (hash*)b;
+        hash *status_1 = (hash *)a;
+        hash *status_2 = (hash *)b;
         return (status_1->key - status_2->key);
 }
 
+/*Implements pipeline*/
 void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
 {
         int status;
@@ -400,19 +403,16 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
         int k = 0;
         pid_t pid;
 
-
         int pipeArray[numberOfPipeCommands - 1][2];
         for (int i = 0; i < numberOfPipeCommands - 1; i++)
         {
                 pipe(pipeArray[i]);
         }
 
-
         for (int i = 0; i < numberOfPipeCommands; i++)
         {
 
                 pid = fork();
-
 
                 if (pid == 0)
                 {
@@ -420,20 +420,20 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
                         if (i == 0)
                         {
 
-                                //On the first cmd chunk, don't need stdin
+                                /*On the first cmd chunk, don't need stdin*/
                                 dup2(pipeArray[i][WRITE], STDOUT_FILENO);
                         }
                         else if (i > 0 && i != numberOfPipeCommands - 1)
                         {
 
-                                //On the inside of pipeline, need the things writtine in STDOUT to be read into STDIN
+                                /*On the inside of pipeline, need the things writtine in STDOUT to be read into STDIN*/
                                 dup2(pipeArray[i - 1][READ], STDIN_FILENO);
                                 dup2(pipeArray[i][WRITE], STDOUT_FILENO);
                         }
                         else if (i == numberOfPipeCommands - 1)
                         {
 
-                                //On the last chunk, don't need to pipe stdout
+                                /*On the last chunk, don't need to pipe stdout*/
                                 dup2(pipeArray[i - 1][READ], STDIN_FILENO);
                         }
                         else
@@ -442,22 +442,20 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
                         }
 
                         for (int j = 0; j < numberOfPipeCommands - 1; j++)
-                        { 
-                                //closing pipes in child
+                        {
+                                /*closing pipes in child*/
                                 close(pipeArray[j][READ]);
                                 close(pipeArray[j][WRITE]);
                         }
 
-                        //fprintf(stderr, "EM: Done with dup2 and closing, now exec.\n");
                         int res = execvp(structCmd.array_commands[i].args[0], &structCmd.array_commands[i].args[0]);
 
                         if (res == -1)
                         {
-                            PrintErr(COMMAND_NOT_FOUND_PIPE, structCmd, 0);
-                            res = 1;
+                                PrintErr(COMMAND_NOT_FOUND_PIPE, structCmd, 0);
+                                res = 1;
                         }
                         exit(res);
-
                 }
 
                 else if (pid < 0)
@@ -467,13 +465,14 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
                 }
         }
 
-        // closing previous pipes in parent
+        /*closing previous pipes in parent*/
         for (int j = 0; j < numberOfPipeCommands - 1; j++)
-        { 
+        {
                 close(pipeArray[j][0]);
                 close(pipeArray[j][1]);
         }
 
+        /*Collect all the children and get their status in a status array*/
         while ((corpse = waitpid(0, &status, 0)) > 0)
         {
 
@@ -481,14 +480,18 @@ void Pipeline(struct CommandLine structCmd, int numberOfPipeCommands)
                 statusArray[k].value = status;
                 k++;
         }
+
+        /*Printing the complition message*/
         qsort(statusArray, numberOfPipeCommands, sizeof(hash), cmpHash);
         fprintf(stderr, "+ completed '%s' ", structCmd.cmd);
-        for(int i=0;i<numberOfPipeCommands;i++){
+        for (int i = 0; i < numberOfPipeCommands; i++)
+        {
                 fprintf(stderr, "[%d]", WEXITSTATUS(statusArray[i].value));
         }
         fprintf(stderr, "\n");
 }
 
+/*Implemets the command when there is both pipeline and redirection or append*/
 void PipeAndRedirection(struct CommandLine structCmd)
 {
         int fd;
@@ -504,10 +507,13 @@ void PipeAndRedirection(struct CommandLine structCmd)
 
         if (pid == 0)
         {
-                if(structCmd.isPipeBeforeRedirect){
+                if (structCmd.isPipeBeforeRedirect)
+                {
                         fd = open(structCmd.array_commands[structCmd.numberOfCommands - 1].args[0], O_WRONLY | O_TRUNC | O_CREAT, 0644);
-                }else if(structCmd.isPipeBeforeAppend){
-                        fd = open(structCmd.array_commands[structCmd.numberOfCommands - 1].args[0], O_WRONLY | O_APPEND| O_CREAT, 0644);
+                }
+                else if (structCmd.isPipeBeforeAppend)
+                {
+                        fd = open(structCmd.array_commands[structCmd.numberOfCommands - 1].args[0], O_WRONLY | O_APPEND | O_CREAT, 0644);
                 }
                 if (fd == -1)
                 {
@@ -529,6 +535,7 @@ void PipeAndRedirection(struct CommandLine structCmd)
         }
 }
 
+/*Implements the special command SLS*/
 int Builtin_sls(struct CommandLine structCmd)
 {
         struct dirent *dir_entry;
@@ -542,6 +549,7 @@ int Builtin_sls(struct CommandLine structCmd)
 
         while ((dir_entry = readdir(directory)) != NULL)
         {
+                /*If the dir_entry starts with "." then don't display it according to reference shell*/
                 if (dir_entry->d_name[0] != current[0] && dir_entry != NULL)
                 {
                         struct stat sb;
@@ -563,6 +571,7 @@ void BuiltinCommands(struct CommandLine *structCmd)
         {
                 char cwd[CMDLINE_MAX];
                 getcwd(cwd, sizeof(cwd));
+
                 if (chdir(structCmd->array_commands[0].args[1]) == -1)
                 {
                         PrintErr(CANNOT_CD_INTO_DIRECTORY, *structCmd, FAILURE);
@@ -571,6 +580,7 @@ void BuiltinCommands(struct CommandLine *structCmd)
                 {
                         PrintErr(NO_ERROR, *structCmd, SUCCESS);
                 }
+
                 structCmd->is_builtin = true;
         }
 
@@ -580,7 +590,9 @@ void BuiltinCommands(struct CommandLine *structCmd)
                 char cwd[CMDLINE_MAX];
                 getcwd(cwd, sizeof(cwd));
                 printf("%s\n", cwd);
+
                 PrintErr(NO_ERROR, *structCmd, SUCCESS);
+
                 structCmd->is_builtin = true;
         }
 
@@ -588,10 +600,17 @@ void BuiltinCommands(struct CommandLine *structCmd)
         if (!strcmp(structCmd->array_commands[0].args[0], SLS))
         {
                 int check = Builtin_sls(*structCmd);
+
+                /*sls could be a failure, Hence checking before printing the complition message*/
                 if (check == SUCCESS)
                 {
                         PrintErr(NO_ERROR, *structCmd, SUCCESS);
                 }
+                else
+                {
+                        PrintErr(NO_ERROR, *structCmd, FAILURE);
+                }
+
                 structCmd->is_builtin = true;
         }
 }
@@ -602,13 +621,15 @@ void Init_struct_cmd(struct CommandLine *structCmd)
         structCmd->isPipe = false;
         structCmd->isPipeBeforeCmd = false;
         structCmd->isRedirBeforeCmd = false;
-        structCmd->to_many_args = false;
+
         structCmd->isRedirAppend = false;
         structCmd->isRedirect = false;
         structCmd->isPipeBeforeRedirect = false;
         structCmd->isRedirectBeforePipe = false;
         structCmd->isPipeBeforeAppend = false;
         structCmd->isAppendBeforePipe = false;
+
+        structCmd->to_many_args = false;
         structCmd->hasEmptyCmd = false;
         structCmd->hasEmptyRedir = false;
 
@@ -630,6 +651,7 @@ int main(void)
         bool exit_bool = false;
         extern int errno;
         int res = 0;
+
         while ((1) && exit_bool == false)
         {
                 int status;
@@ -777,6 +799,7 @@ int main(void)
 
                                 for (int i = 0; i < structCmd.numberOfCommands; i++)
                                 {
+                                        /*assign ith commands their arguments*/
                                         structCmd.array_commands[i].numberOfArguments = ConvertToWords(redirArgsTrim[i], argvCommandsRedirect, delim_space);
                                         if (structCmd.array_commands[i].numberOfArguments >= MAX_ARGS)
                                         {
@@ -808,8 +831,8 @@ int main(void)
 
                                 if (structCmd.hasEmptyCmd)
                                 {
-                                    PrintErr(MISSING_COMMAND, structCmd, FAILURE);
-                                    continue;
+                                        PrintErr(MISSING_COMMAND, structCmd, FAILURE);
+                                        continue;
                                 }
 
                                 structCmd.numberOfCommands = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe);
@@ -821,12 +844,14 @@ int main(void)
 
                                 for (int i = 0; i < structCmd.numberOfCommands; i++)
                                 {
+                                        /*assign the ith command their arguments*/
                                         structCmd.array_commands[i].numberOfArguments = ConvertToWords(pipeArgsTrim[i], argvCommandsPipe, delim_space);
                                         if (structCmd.array_commands[i].numberOfArguments >= MAX_ARGS)
                                         {
                                                 structCmd.to_many_args = true;
                                                 break;
                                         }
+
                                         CopyCharArray(structCmd.array_commands[i].args, argvCommandsPipe, structCmd.array_commands[i].numberOfArguments);
                                 }
 
@@ -843,16 +868,18 @@ int main(void)
                         else if (structCmd.isPipeBeforeRedirect || structCmd.isPipeBeforeAppend)
                         {
 
+                                /*Pipe and redirection*/
+
+                                /*When no outputfile error occurs, has emptycmd triggers too. So do no_output check first*/
                                 if (structCmd.hasEmptyRedir)
                                 {
-                                PrintErr(NO_OUTPUT_FILE, structCmd, FAILURE);
-                                continue;
+                                        PrintErr(NO_OUTPUT_FILE, structCmd, FAILURE);
+                                        continue;
                                 }
-                                //When no outputfile error occurs, has emptycmd triggers too. So do no_output check first
                                 if (structCmd.hasEmptyCmd)
                                 {
-                                    PrintErr(MISSING_COMMAND, structCmd, FAILURE);
-                                    continue;
+                                        PrintErr(MISSING_COMMAND, structCmd, FAILURE);
+                                        continue;
                                 }
 
                                 structCmd.numberOfCommands = ConvertToWords(cmd_pl_Copy, argPL, delim_pipe_and_redirect);
@@ -864,12 +891,14 @@ int main(void)
 
                                 for (int i = 0; i < structCmd.numberOfCommands; i++)
                                 {
+                                        /*assign the ith command their arguments*/
                                         structCmd.array_commands[i].numberOfArguments = ConvertToWords(pipeAndRedirectArgsTrim[i], argvCommandsPipe, delim_space);
                                         if (structCmd.array_commands[i].numberOfArguments >= MAX_ARGS)
                                         {
                                                 structCmd.to_many_args = true;
                                                 break;
                                         }
+
                                         CopyCharArray(structCmd.array_commands[i].args, argvCommandsPipe, structCmd.array_commands[i].numberOfArguments);
                                 }
                                 PipeAndRedirection(structCmd);
